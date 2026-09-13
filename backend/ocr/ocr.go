@@ -1,294 +1,244 @@
+// Package ocr turns document images into text using an OpenAI-compatible
+// multimodal (vision) chat endpoint.
+//
+// The provider is user-configurable: anything speaking the
+// /chat/completions schema works, including OpenAI, Google Gemini's
+// compatibility layer, OpenRouter and local servers such as Ollama or LM Studio.
 package ocr
 
 import (
-	"bytes"
-	"encoding/base64"
-	"encoding/json"
+	"context"
 	"fmt"
-	"io"
-	"mime"
-	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
-	"time"
 
 	"golang.org/x/text/unicode/norm"
 
 	"itt-ocr/backend/config"
+	"itt-ocr/backend/types"
 )
 
-const (
-	OCRBasePrompt = "You are an expert high-precision OCR and document transcription engine. " +
-		"Transcribe all visible text, handwritten notes, numbers, tables, and punctuation from this image accurately. " +
-		"Support multilingual scripts including English, Bengali (বাংলা), Assamese, Hindi, and others accurately with correct conjuncts and diacritics. " +
-		"Output clean text or Markdown only without introductory pleasantries or commentary."
-)
+// defaultBaseURL is used when no endpoint has been configured.
+const defaultBaseURL = "https://api.openai.com/v1"
 
-type ModeInfo struct {
-	Label             string
-	SystemInstruction string
-	UserPrompt        string
+// basePrompt states the transcription contract shared by every output mode.
+const basePrompt = "You are an expert high-precision OCR and document transcription engine. " +
+	"Transcribe all visible text, handwritten notes, numbers, tables, and punctuation from this image accurately. " +
+	"Support multilingual scripts including English, Bengali (বাংলা), Assamese, Hindi, and others accurately with correct conjuncts and diacritics. " +
+	"Never invent, correct, translate or summarise content that is not visibly present. " +
+	"If a region is genuinely illegible, mark it [illegible] rather than guessing. " +
+	"Output clean text or Markdown only, with no introductory pleasantries or trailing commentary."
+
+// Mode describes one output shape and the prompts that elicit it.
+type Mode struct {
+	// ID is the stable key used by config and the frontend.
+	ID types.OutputMode `json:"id"`
+	// Label is the human-readable name shown in the UI.
+	Label string `json:"label"`
+	// Description explains when to pick this mode.
+	Description string `json:"description"`
+	// SystemInstruction is appended to basePrompt.
+	SystemInstruction string `json:"-"`
+	// UserPrompt accompanies the image in the user message.
+	UserPrompt string `json:"-"`
 }
 
-var OutputModes = map[string]ModeInfo{
-	"document": {
-		Label: "Document",
+// modes is the authoritative registry of output modes.
+var modes = map[types.OutputMode]Mode{
+	types.OutputModeDocument: {
+		ID:          types.OutputModeDocument,
+		Label:       "Document",
+		Description: "Prose, headings and mixed layouts. Preserves reading order and structure.",
 		SystemInstruction: "Preserve structural elements such as headings, lists, tables, and paragraphs where applicable. " +
 			"Maintain natural reading order and document hierarchy.",
-		UserPrompt: "Please transcribe and extract all text and layout elements present in this image preserving original structure.",
+		UserPrompt: "Transcribe all text and layout elements present in this image, preserving the original structure.",
 	},
-	"spreadsheet": {
-		Label: "Spreadsheet",
-		SystemInstruction: "You are a specialized financial and tabular document extractor. " +
-			"Identify all tables, itemized billing rows, quantities, rates, unit prices, descriptions, and numerical totals. " +
-			"Format all tabular sections strictly as clean Markdown tables with header rows (`| Col 1 | Col 2 |`) so they can be exported to CSV or pasted into Excel. " +
-			"For non-table document metadata (such as invoice number, date, vendor name, buyer name, total amount), format them as a concise 2-column key-value table (`| Field | Value |`). " +
-			"Do NOT merge separate columns into combined text paragraphs.",
-		UserPrompt: "Extract all tabular data, line items, and document metadata from this image strictly into formatted tables suitable for spreadsheets.",
+	types.OutputModeSpreadsheet: {
+		ID:          types.OutputModeSpreadsheet,
+		Label:       "Spreadsheet",
+		Description: "Invoices, ledgers and tables. Emits Markdown tables ready for CSV export.",
+		SystemInstruction: "You are a specialised financial and tabular document extractor. " +
+			"Identify all tables, itemised billing rows, quantities, rates, unit prices, descriptions, and numerical totals. " +
+			"Format all tabular sections strictly as clean Markdown tables with header rows (`| Col 1 | Col 2 |`) so they can be exported to CSV or pasted into a spreadsheet. " +
+			"For non-table document metadata (such as invoice number, date, vendor name, buyer name, total amount), format them as a concise two-column key-value table (`| Field | Value |`). " +
+			"Never merge separate columns into combined text paragraphs. " +
+			"Transcribe numbers exactly as printed; do not recompute or correct totals.",
+		UserPrompt: "Extract all tabular data, line items, and document metadata from this image strictly as formatted Markdown tables suitable for spreadsheets.",
 	},
-	"key_value": {
-		Label: "Key-Value Form",
+	types.OutputModeKeyValue: {
+		ID:          types.OutputModeKeyValue,
+		Label:       "Key-Value",
+		Description: "Forms and applications. Emits `Field: Value` pairs grouped by section.",
 		SystemInstruction: "You are a structured data and form extractor. " +
 			"Extract every form field, label, identifier, and value present in the image. " +
 			"Format strictly as clean key-value pairs (`Field Name: Value`). " +
-			"Group related fields under concise markdown headings. " +
+			"Group related fields under concise Markdown headings. " +
+			"Where a field is present but blank, emit the field with an empty value rather than omitting it. " +
 			"Do not output conversational commentary.",
 		UserPrompt: "Extract all form fields, labels, and corresponding values from this image as structured key-value pairs.",
 	},
-	"raw_text": {
-		Label: "Raw Text",
+	types.OutputModeRawText: {
+		ID:          types.OutputModeRawText,
+		Label:       "Raw Text",
+		Description: "Verbatim plain text with no Markdown at all.",
 		SystemInstruction: "You are a pure OCR transcription engine. " +
 			"Transcribe all text in natural reading order. " +
-			"Output pure plain text only with zero markdown formatting, zero table pipes, zero bold asterisks, and zero commentary.",
-		UserPrompt: "Transcribe all text from this image as raw unformatted plain text.",
+			"Output pure plain text only, with zero Markdown formatting, zero table pipes, zero bold asterisks, and zero commentary.",
+		UserPrompt: "Transcribe all text from this image as raw, unformatted plain text.",
 	},
 }
 
-var QualityModels = map[string]string{
-	"standard": "gemini-3.5-flash-lite",
-	"high":     "gemini-3.7-flash",
+// modeOrder fixes the display order, since map iteration is random.
+var modeOrder = []types.OutputMode{
+	types.OutputModeDocument,
+	types.OutputModeSpreadsheet,
+	types.OutputModeKeyValue,
+	types.OutputModeRawText,
 }
 
-// ResolveChatEndpoint normalizes base endpoint URLs into a valid /chat/completions route
-func ResolveChatEndpoint(baseURL string) string {
-	clean := strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	if clean == "" {
-		clean = "https://api.openai.com/v1"
+// Modes returns the available output modes in display order.
+func Modes() []Mode {
+	out := make([]Mode, 0, len(modeOrder))
+	for _, id := range modeOrder {
+		out = append(out, modes[id])
 	}
+	return out
+}
 
-	if strings.Contains(clean, "generativelanguage.googleapis.com") {
-		if strings.HasSuffix(clean, "/chat/completions") {
-			return clean
+// modeFor returns the requested mode, falling back to Document.
+func modeFor(mode string) Mode {
+	if m, ok := modes[types.OutputMode(mode)]; ok {
+		return m
+	}
+	return modes[types.OutputModeDocument]
+}
+
+// highQualitySuffixes maps a configured model to its higher-accuracy sibling
+// for the "high" quality tier.
+//
+// This is intentionally conservative. An earlier version replaced the user's
+// configured model with a hardcoded name, which broke every non-Gemini provider
+// and pinned model versions that do not exist. Quality now only ever *upgrades*
+// a model we recognise, and otherwise leaves the user's choice untouched — the
+// provider, not this app, is the authority on which models exist.
+var highQualityUpgrades = map[string]string{
+	"gpt-4o-mini":             "gpt-4o",
+	"gemini-1.5-flash":        "gemini-1.5-pro",
+	"gemini-2.0-flash":        "gemini-2.0-pro",
+	"gemini-2.0-flash-lite":   "gemini-2.0-flash",
+	"gemini-1.5-flash-8b":     "gemini-1.5-flash",
+	"claude-3-haiku-20240307": "claude-3-5-sonnet-20241022",
+}
+
+// ResolveModel picks the model for a request.
+//
+// The configured model is always the baseline. The "high" tier upgrades it only
+// when a known better sibling exists, so a custom or self-hosted model name is
+// never silently replaced with something the provider has never heard of.
+func ResolveModel(configured, quality string) string {
+	model := strings.TrimSpace(configured)
+	if model == "" {
+		model = "gpt-4o-mini"
+	}
+	if types.Quality(quality) == types.QualityHigh {
+		if upgraded, ok := highQualityUpgrades[model]; ok {
+			return upgraded
 		}
-		if !strings.HasSuffix(clean, "/openai") {
-			if strings.HasSuffix(clean, "/v1") || strings.HasSuffix(clean, "/v1beta") {
-				lastSlash := strings.LastIndex(clean, "/")
-				clean = clean[:lastSlash]
-			}
-			clean = fmt.Sprintf("%s/v1beta/openai", clean)
+	}
+	return model
+}
+
+// ExtractText transcribes the document at filePath.
+//
+// mode selects the output shape (see Modes) and quality selects the
+// speed/accuracy tradeoff. The returned text is NFC-normalised so that Bengali
+// and other Indic conjuncts and diacritics compare and render correctly.
+//
+// Every completed attempt is recorded in the local usage counters exactly once.
+func ExtractText(ctx context.Context, filePath, mode, quality string) (string, error) {
+	text, err := extract(ctx, filePath, mode, quality)
+
+	// Record the outcome once, here, rather than at each early return — that
+	// duplication previously made the counters unreliable. A cancelled request
+	// is a user action, not an attempt, so it is not counted.
+	if err != nil {
+		if !isCancellation(err) {
+			_, _ = config.RecordExtraction(0, false)
 		}
-		return fmt.Sprintf("%s/chat/completions", clean)
+		return "", err
+	}
+	_, _ = config.RecordExtraction(len([]rune(text)), true)
+	return text, nil
+}
+
+func extract(ctx context.Context, filePath, mode, quality string) (string, error) {
+	if strings.TrimSpace(filePath) == "" {
+		return "", fmt.Errorf("no document was supplied")
 	}
 
-	if strings.HasSuffix(clean, "/chat/completions") {
-		return clean
-	}
-	return fmt.Sprintf("%s/chat/completions", clean)
-}
-
-func getMimeType(filePath string) string {
-	ext := strings.ToLower(filepath.Ext(filePath))
-	switch ext {
-	case ".png":
-		return "image/png"
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".webp":
-		return "image/webp"
-	case ".gif":
-		return "image/gif"
-	case ".bmp":
-		return "image/bmp"
-	default:
-		m := mime.TypeByExtension(ext)
-		if m != "" {
-			return m
-		}
-		return "image/jpeg"
-	}
-}
-
-type chatMessageContent struct {
-	Type     string         `json:"type"`
-	Text     string         `json:"text,omitempty"`
-	ImageURL *imageURLField `json:"image_url,omitempty"`
-}
-
-type imageURLField struct {
-	URL string `json:"url"`
-}
-
-type chatMessage struct {
-	Role    string      `json:"role"`
-	Content interface{} `json:"content"`
-}
-
-type chatCompletionPayload struct {
-	Model       string        `json:"model"`
-	Messages    []chatMessage `json:"messages"`
-	Temperature float64       `json:"temperature"`
-}
-
-type chatCompletionResponse struct {
-	Choices []struct {
-		Message struct {
-			Content string `json:"content"`
-		} `json:"message"`
-	} `json:"choices"`
-	Error *struct {
-		Message string `json:"message"`
-	} `json:"error,omitempty"`
-}
-
-// ExtractText sends document image to multimodal vision endpoint
-func ExtractText(filePath string, mode string, quality string) (string, error) {
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		return "", fmt.Errorf("failed to load config: %w", err)
+		// A corrupt config still yields usable defaults, so continue rather
+		// than failing the extraction outright.
+		cfg = config.DefaultConfig()
 	}
 
-	apiKey := strings.TrimSpace(cfg.APIKey)
-	rawBase := strings.TrimSpace(cfg.BaseURL)
-	if rawBase == "" {
-		rawBase = "https://api.openai.com/v1"
-	}
-	url := ResolveChatEndpoint(rawBase)
-
-	modelName := cfg.ModelName
-	if qModel, ok := QualityModels[quality]; ok && quality != "" {
-		modelName = qModel
-	}
-	if modelName == "" {
-		modelName = "gpt-4o-mini"
-	}
-
-	cleanBase := strings.TrimRight(rawBase, "/")
-	if apiKey == "" && !strings.Contains(cleanBase, "localhost") && !strings.Contains(cleanBase, "127.0.0.1") {
-		return "", fmt.Errorf("API Key is missing. Please configure your API Key in Settings.")
-	}
-
-	imageData, err := os.ReadFile(filePath)
+	ep, err := resolveEndpoint(cfg, quality)
 	if err != nil {
-		return "", fmt.Errorf("could not read image file: %w", err)
+		return "", err
 	}
 
-	mimeType := getMimeType(filePath)
-	base64Str := base64.StdEncoding.EncodeToString(imageData)
-	dataURL := fmt.Sprintf("data:%s;base64,%s", mimeType, base64Str)
-
-	modeInfo, exists := OutputModes[mode]
-	if !exists {
-		modeInfo = OutputModes["document"]
-	}
-
-	effectiveSysPrompt := fmt.Sprintf("%s\n\n[OUTPUT FORMAT DIRECTIVE: %s]\n%s",
-		OCRBasePrompt, strings.ToUpper(modeInfo.Label), modeInfo.SystemInstruction)
-
-	messages := []chatMessage{
-		{
-			Role:    "system",
-			Content: effectiveSysPrompt,
-		},
-		{
-			Role: "user",
-			Content: []chatMessageContent{
-				{
-					Type: "text",
-					Text: modeInfo.UserPrompt,
-				},
-				{
-					Type: "image_url",
-					ImageURL: &imageURLField{
-						URL: dataURL,
-					},
-				},
-			},
-		},
-	}
-
-	payload := chatCompletionPayload{
-		Model:       modelName,
-		Messages:    messages,
-		Temperature: 0.1,
-	}
-
-	payloadBytes, err := json.Marshal(payload)
+	dataURL, err := encodeFileAsDataURL(filePath)
 	if err != nil {
-		return "", fmt.Errorf("failed to encode request payload: %w", err)
+		return "", err
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payloadBytes))
+	m := modeFor(mode)
+	systemPrompt := fmt.Sprintf("%s\n\n[OUTPUT FORMAT DIRECTIVE: %s]\n%s",
+		basePrompt, strings.ToUpper(m.Label), m.SystemInstruction)
+
+	raw, err := complete(ctx, ep, systemPrompt, m.UserPrompt, dataURL)
 	if err != nil {
-		return "", fmt.Errorf("failed to create HTTP request: %w", err)
+		return "", err
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	if apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+apiKey)
+	text := norm.NFC.String(strings.TrimSpace(raw))
+	text = stripCodeFence(text)
+	if text == "" {
+		return "", fmt.Errorf("the model returned no text; the document may be blank or unreadable")
 	}
-	if strings.Contains(strings.ToLower(cleanBase), "openrouter") {
-		req.Header.Set("HTTP-Referer", "https://github.com/its-Sohan/itt_ocr_client")
-		req.Header.Set("X-Title", "ITT OCR Client")
+	return text, nil
+}
+
+// stripCodeFence removes a single wrapping ``` fence, which models add despite
+// being told not to. Fences *within* the text are left alone, since a genuine
+// multi-block response should keep its structure.
+func stripCodeFence(s string) string {
+	if !strings.HasPrefix(s, "```") {
+		return s
 	}
 
-	client := &http.Client{
-		Timeout: 90 * time.Second,
+	lines := strings.Split(s, "\n")
+	if len(lines) < 2 {
+		return s
 	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		_, _ = config.UpdateUsageStats(0, false, 0)
-		return "", fmt.Errorf("network error while contacting vision API (%s): %w", cleanBase, err)
+	// The closing fence must be the final non-empty line.
+	last := len(lines) - 1
+	for last > 0 && strings.TrimSpace(lines[last]) == "" {
+		last--
 	}
-	defer resp.Body.Close()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		_, _ = config.UpdateUsageStats(0, false, 0)
-		return "", fmt.Errorf("failed to read response: %w", err)
+	if last == 0 || strings.TrimSpace(lines[last]) != "```" {
+		return s
 	}
-
-	if resp.StatusCode != http.StatusOK {
-		_, _ = config.UpdateUsageStats(0, false, 0)
-		var errResp chatCompletionResponse
-		if err := json.Unmarshal(bodyBytes, &errResp); err == nil && errResp.Error != nil {
-			return "", fmt.Errorf("LLM API error (%d): %s", resp.StatusCode, errResp.Error.Message)
+	// Only unwrap when there is exactly one fence pair.
+	for _, l := range lines[1:last] {
+		if strings.HasPrefix(strings.TrimSpace(l), "```") {
+			return s
 		}
-		if resp.StatusCode == 404 {
-			return "", fmt.Errorf("Endpoint Not Found (404) at %s. Please verify your Endpoint URL in Settings.", url)
-		}
-		if resp.StatusCode == 401 || resp.StatusCode == 403 {
-			return "", fmt.Errorf("Authentication/Authorization Error (%d). Please check your API key in Settings.", resp.StatusCode)
-		}
-		return "", fmt.Errorf("LLM API error (%d): %s", resp.StatusCode, string(bodyBytes))
 	}
+	return strings.TrimSpace(strings.Join(lines[1:last], "\n"))
+}
 
-	var chatResp chatCompletionResponse
-	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
-		_, _ = config.UpdateUsageStats(0, false, 0)
-		return "", fmt.Errorf("failed to parse API JSON reply: %w", err)
-	}
-
-	if len(chatResp.Choices) == 0 {
-		_, _ = config.UpdateUsageStats(0, false, 0)
-		return "", fmt.Errorf("LLM API returned an empty choices list")
-	}
-
-	rawText := chatResp.Choices[0].Message.Content
-	// Apply Unicode NFC normalization to preserve Bengali conjuncts & diacritics
-	normalizedText := norm.NFC.String(strings.TrimSpace(rawText))
-
-	_, _ = config.UpdateUsageStats(len(normalizedText), true, 0)
-	return normalizedText, nil
+func isCancellation(err error) bool {
+	return err != nil && (err == context.Canceled ||
+		strings.Contains(err.Error(), context.Canceled.Error()))
 }

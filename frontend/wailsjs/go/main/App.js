@@ -34,12 +34,24 @@ export function GetUsageStats() {
   return window['go']['main']['App']['GetUsageStats']();
 }
 
+export function GetVersionInfo() {
+  return window['go']['main']['App']['GetVersionInfo']();
+}
+
 export function LoadHistory() {
   return window['go']['main']['App']['LoadHistory']();
 }
 
+export function LoadPreview(arg1) {
+  return window['go']['main']['App']['LoadPreview'](arg1);
+}
+
 export function PickFiles() {
   return window['go']['main']['App']['PickFiles']();
+}
+
+export function ResetUsageStats() {
+  return window['go']['main']['App']['ResetUsageStats']();
 }
 
 export function SaveConfig(arg1) {

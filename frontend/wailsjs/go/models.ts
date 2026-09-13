@@ -88,6 +88,24 @@ export namespace types {
 		    return a;
 		}
 	}
+	export class DocumentPreview {
+	    data_url: string;
+	    mime_type: string;
+	    width: number;
+	    height: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new DocumentPreview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.data_url = source["data_url"];
+	        this.mime_type = source["mime_type"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	    }
+	}
 	export class InvoiceValidationResult {
 	    matched: boolean;
 	    total: number;
@@ -113,6 +131,7 @@ export namespace types {
 	    file_path: string;
 	    file_name: string;
 	    file_size_str: string;
+	    file_size_bytes: number;
 	    status: string;
 	    extracted_text: string;
 	    error_message: string;
@@ -132,6 +151,7 @@ export namespace types {
 	        this.file_path = source["file_path"];
 	        this.file_name = source["file_name"];
 	        this.file_size_str = source["file_size_str"];
+	        this.file_size_bytes = source["file_size_bytes"];
 	        this.status = source["status"];
 	        this.extracted_text = source["extracted_text"];
 	        this.error_message = source["error_message"];
@@ -164,17 +184,20 @@ export namespace types {
 
 export namespace updater {
 	
-	export class UpdateCheckResult {
+	export class CheckResult {
 	    has_update: boolean;
 	    current_version: string;
 	    latest_version: string;
+	    release_name: string;
 	    release_notes: string;
 	    release_url: string;
+	    published_at: string;
 	    download_url: string;
+	    asset_name: string;
 	    error?: string;
 	
 	    static createFrom(source: any = {}) {
-	        return new UpdateCheckResult(source);
+	        return new CheckResult(source);
 	    }
 	
 	    constructor(source: any = {}) {
@@ -182,10 +205,40 @@ export namespace updater {
 	        this.has_update = source["has_update"];
 	        this.current_version = source["current_version"];
 	        this.latest_version = source["latest_version"];
+	        this.release_name = source["release_name"];
 	        this.release_notes = source["release_notes"];
 	        this.release_url = source["release_url"];
+	        this.published_at = source["published_at"];
 	        this.download_url = source["download_url"];
+	        this.asset_name = source["asset_name"];
 	        this.error = source["error"];
+	    }
+	}
+
+}
+
+export namespace version {
+	
+	export class Info {
+	    version: string;
+	    commit: string;
+	    build_date: string;
+	    go_version: string;
+	    os: string;
+	    arch: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Info(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.commit = source["commit"];
+	        this.build_date = source["build_date"];
+	        this.go_version = source["go_version"];
+	        this.os = source["os"];
+	        this.arch = source["arch"];
 	    }
 	}
 

@@ -11,6 +11,7 @@ export interface QueueItem {
   file_path: string;
   file_name: string;
   file_size_str: string;
+  file_size_bytes?: number;
   status: 'Ready' | 'Processing' | 'Done' | 'Failed' | string;
   extracted_text: string;
   error_message: string;
@@ -18,6 +19,13 @@ export interface QueueItem {
   output_mode: 'document' | 'spreadsheet' | 'key_value' | 'raw_text' | string;
   block_boxes?: BoundingBox[];
   created_at?: any;
+}
+
+export interface DocumentPreview {
+  data_url: string;
+  mime_type: string;
+  width: number;
+  height: number;
 }
 
 export interface UsageStats {
@@ -53,8 +61,20 @@ export interface UpdateCheckResult {
   has_update: boolean;
   current_version: string;
   latest_version: string;
+  release_name?: string;
   release_notes: string;
   release_url: string;
+  published_at?: string;
   download_url: string;
+  asset_name?: string;
   error?: string;
+}
+
+export interface VersionInfo {
+  version: string;
+  commit: string;
+  build_date: string;
+  go_version: string;
+  os: string;
+  arch: string;
 }

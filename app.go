@@ -14,10 +14,12 @@ import (
 	"itt-ocr/backend/clipboard"
 	"itt-ocr/backend/config"
 	"itt-ocr/backend/ocr"
+	"itt-ocr/backend/preview"
 	"itt-ocr/backend/scanner"
 	"itt-ocr/backend/transforms"
 	"itt-ocr/backend/types"
 	"itt-ocr/backend/updater"
+	"itt-ocr/backend/version"
 )
 
 // App struct
@@ -34,6 +36,13 @@ func NewApp() *App {
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+}
+
+func (a *App) context() context.Context {
+	if a.ctx != nil {
+		return a.ctx
+	}
+	return context.Background()
 }
 
 func formatFileSize(bytes int64) string {
@@ -59,6 +68,16 @@ func (a *App) SaveConfig(cfg types.Config) error {
 func (a *App) GetUsageStats() types.UsageStats {
 	cfg, _ := config.LoadConfig()
 	return cfg.UsageStats
+}
+
+// ResetUsageStats zeroes all local metrics
+func (a *App) ResetUsageStats() (types.UsageStats, error) {
+	return config.ResetUsageStats()
+}
+
+// GetVersionInfo returns version and build details
+func (a *App) GetVersionInfo() version.Info {
+	return version.Current()
 }
 
 // LoadHistory returns queue items saved from previous sessions
@@ -91,26 +110,29 @@ func (a *App) PickFiles() ([]types.QueueItem, error) {
 
 	for _, path := range selection {
 		fi, err := os.Stat(path)
+		var sizeBytes int64
 		sizeStr := "Unknown"
 		if err == nil {
-			sizeStr = formatFileSize(fi.Size())
+			sizeBytes = fi.Size()
+			sizeStr = formatFileSize(sizeBytes)
 		}
 
 		item := types.QueueItem{
-			ID:          uuid.New().String()[:8],
-			FilePath:    path,
-			FileName:    filepath.Base(path),
-			FileSizeStr: sizeStr,
-			Status:      "Ready",
-			Source:      "upload",
-			OutputMode:  cfg.DefaultOutputMode,
-			CreatedAt:   time.Now(),
+			ID:            uuid.New().String()[:8],
+			FilePath:      path,
+			FileName:      filepath.Base(path),
+			FileSizeStr:   sizeStr,
+			FileSizeBytes: sizeBytes,
+			Status:        types.StatusReady,
+			Source:        types.SourceUpload,
+			OutputMode:    cfg.DefaultOutputMode,
+			CreatedAt:     time.Now(),
 		}
 		items = append(items, item)
 	}
 
 	if len(items) > 0 {
-		_, _ = config.UpdateUsageStats(0, true, len(items))
+		_, _ = config.RecordIngest(len(items))
 	}
 
 	return items, nil
@@ -124,24 +146,27 @@ func (a *App) GetClipboardImage() (*types.QueueItem, error) {
 	}
 
 	fi, err := os.Stat(path)
+	var sizeBytes int64
 	sizeStr := "Unknown"
 	if err == nil {
-		sizeStr = formatFileSize(fi.Size())
+		sizeBytes = fi.Size()
+		sizeStr = formatFileSize(sizeBytes)
 	}
 
 	cfg, _ := config.LoadConfig()
 	item := &types.QueueItem{
-		ID:          uuid.New().String()[:8],
-		FilePath:    path,
-		FileName:    filepath.Base(path),
-		FileSizeStr: sizeStr,
-		Status:      "Ready",
-		Source:      "clipboard",
-		OutputMode:  cfg.DefaultOutputMode,
-		CreatedAt:   time.Now(),
+		ID:            uuid.New().String()[:8],
+		FilePath:      path,
+		FileName:      filepath.Base(path),
+		FileSizeStr:   sizeStr,
+		FileSizeBytes: sizeBytes,
+		Status:        types.StatusReady,
+		Source:        types.SourceClipboard,
+		OutputMode:    cfg.DefaultOutputMode,
+		CreatedAt:     time.Now(),
 	}
 
-	_, _ = config.UpdateUsageStats(0, true, 1)
+	_, _ = config.RecordIngest(1)
 	return item, nil
 }
 
@@ -153,35 +178,43 @@ func (a *App) ScanDocument() (*types.QueueItem, error) {
 	}
 
 	fi, err := os.Stat(path)
+	var sizeBytes int64
 	sizeStr := "Unknown"
 	if err == nil {
-		sizeStr = formatFileSize(fi.Size())
+		sizeBytes = fi.Size()
+		sizeStr = formatFileSize(sizeBytes)
 	}
 
 	cfg, _ := config.LoadConfig()
 	item := &types.QueueItem{
-		ID:          uuid.New().String()[:8],
-		FilePath:    path,
-		FileName:    filepath.Base(path),
-		FileSizeStr: sizeStr,
-		Status:      "Ready",
-		Source:      "scanner",
-		OutputMode:  cfg.DefaultOutputMode,
-		CreatedAt:   time.Now(),
+		ID:            uuid.New().String()[:8],
+		FilePath:      path,
+		FileName:      filepath.Base(path),
+		FileSizeStr:   sizeStr,
+		FileSizeBytes: sizeBytes,
+		Status:        types.StatusReady,
+		Source:        types.SourceScanner,
+		OutputMode:    cfg.DefaultOutputMode,
+		CreatedAt:     time.Now(),
 	}
 
-	_, _ = config.UpdateUsageStats(0, true, 1)
+	_, _ = config.RecordIngest(1)
 	return item, nil
+}
+
+// LoadPreview loads a local document image and returns it as a data URL for display
+func (a *App) LoadPreview(filePath string) (types.DocumentPreview, error) {
+	return preview.Load(filePath)
 }
 
 // ExtractText executes the vision LLM transcription
 func (a *App) ExtractText(filePath string, mode string, quality string) (string, error) {
-	return ocr.ExtractText(filePath, mode, quality)
+	return ocr.ExtractText(a.context(), filePath, mode, quality)
 }
 
 // AlignBlocks detects normalized 2D bounding boxes for text blocks
 func (a *App) AlignBlocks(filePath string, blocks []string) ([]types.BoundingBox, error) {
-	return ocr.AlignBlocksWithAI(filePath, blocks)
+	return ocr.AlignBlocksWithAI(a.context(), filePath, blocks)
 }
 
 // TransformText executes deterministic post-processing transforms
@@ -228,11 +261,11 @@ func (a *App) SaveExportFile(defaultFilename string, content string) (string, er
 }
 
 // CheckForUpdates checks GitHub Releases for new updates
-func (a *App) CheckForUpdates() (updater.UpdateCheckResult, error) {
-	return updater.CheckForUpdates()
+func (a *App) CheckForUpdates() (updater.CheckResult, error) {
+	return updater.Check(a.context())
 }
 
 // GenerateBugReport generates a redacted diagnostic report
 func (a *App) GenerateBugReport(description string, steps string) (string, error) {
-	return bugreport.GenerateBugReport(description, steps)
+	return bugreport.Generate(description, steps)
 }

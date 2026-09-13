@@ -1,12 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppStore, extractItem } from '../store/useAppStore';
+import * as api from '../../wailsjs/go/main/App';
 
 export const PreviewPanel: React.FC = () => {
   const { queue, selectedItemId, isExtracting, auditMode, activeBlockIndex } = useAppStore();
   const [rotation, setRotation] = useState<number>(0);
   const [fitMode, setFitMode] = useState<'contain' | 'cover'>('contain');
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState<boolean>(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   const selectedItem = queue.find((i) => i.id === selectedItemId);
+
+  useEffect(() => {
+    let active = true;
+    if (!selectedItem?.file_path) {
+      setPreviewUrl(null);
+      setPreviewError(null);
+      setPreviewLoading(false);
+      return;
+    }
+
+    setPreviewLoading(true);
+    setPreviewError(null);
+
+    api.LoadPreview(selectedItem.file_path)
+      .then((preview) => {
+        if (active) {
+          setPreviewUrl(preview.data_url);
+          setPreviewLoading(false);
+        }
+      })
+      .catch((err: any) => {
+        if (active) {
+          setPreviewUrl(null);
+          setPreviewError(err?.message || String(err));
+          setPreviewLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedItem?.file_path]);
 
   const rotateClockwise = () => {
     setRotation((r) => (r + 90) % 360);
@@ -33,27 +69,37 @@ export const PreviewPanel: React.FC = () => {
           <div className="relative w-full h-full flex items-center justify-center p-4">
             {/* Document Image Viewport */}
             <div className="relative max-w-full max-h-full flex items-center justify-center">
-              <img
-                src={selectedItem.file_path ? `/${selectedItem.file_path}` : ''}
-                alt={selectedItem.file_name}
-                style={{
-                  transform: `rotate(${rotation}deg)`,
-                  transition: 'transform 250ms ease-out',
-                }}
-                className={`max-h-[calc(100vh-10rem)] max-w-full rounded shadow-md object-${fitMode}`}
-                onError={(e) => {
-                  // Fallback for local files: render placeholder card if image path is not servable via webview direct URL
-                  const target = e.currentTarget;
-                  target.style.display = 'none';
-                  const parent = target.parentElement;
-                  if (parent && !parent.querySelector('.img-fallback')) {
-                    const fallback = document.createElement('div');
-                    fallback.className = 'img-fallback flex flex-col items-center justify-center p-12 text-center text-ink-secondaryLight dark:text-ink-secondaryDark font-mono text-xs';
-                    fallback.innerHTML = `<span class="text-sm font-semibold text-ink-primaryLight dark:text-ink-primaryDark mb-1">${selectedItem.file_name}</span><span>${selectedItem.file_path}</span>`;
-                    parent.appendChild(fallback);
-                  }
-                }}
-              />
+              {previewLoading ? (
+                <div className="flex flex-col items-center justify-center p-8 space-y-2 text-ink-secondaryLight dark:text-ink-secondaryDark font-mono text-xs">
+                  <svg className="animate-spin w-5 h-5 text-brand-light dark:text-brand-dark" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                  <span>Loading preview...</span>
+                </div>
+              ) : previewError ? (
+                <div className="flex flex-col items-center justify-center p-8 text-center max-w-md text-ink-secondaryLight dark:text-ink-secondaryDark font-mono text-xs">
+                  <span className="text-sm font-semibold text-ink-primaryLight dark:text-ink-primaryDark mb-2">
+                    {selectedItem.file_name}
+                  </span>
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mb-2">
+                    {previewError}
+                  </p>
+                  <span className="text-[11px] opacity-75 break-all">
+                    {selectedItem.file_path}
+                  </span>
+                </div>
+              ) : previewUrl ? (
+                <img
+                  src={previewUrl}
+                  alt={selectedItem.file_name}
+                  style={{
+                    transform: `rotate(${rotation}deg)`,
+                    transition: 'transform 250ms ease-out',
+                  }}
+                  className={`max-h-[calc(100vh-10rem)] max-w-full rounded shadow-md object-${fitMode}`}
+                />
+              ) : null}
 
               {/* Synchronized Audit Focus Guide Box */}
               {activeBox && (
