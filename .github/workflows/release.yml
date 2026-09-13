@@ -34,6 +34,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
 
+      - name: Set up Windows build dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install nsis -y
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
