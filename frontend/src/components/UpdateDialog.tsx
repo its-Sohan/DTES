@@ -53,21 +53,21 @@ export const UpdateDialog: React.FC = () => {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                  New version available: v{updateInfo.latestVersion}
+                  New version available: v{updateInfo.latest_version}
                 </span>
                 <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-inset-light dark:bg-inset-dark">
-                  Current: v{updateInfo.currentVersion}
+                  Current: v{updateInfo.current_version}
                 </span>
               </div>
               <div className="p-3 rounded bg-inset-light dark:bg-inset-dark border border-hairline-light dark:border-hairline-dark font-sans text-xs leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap">
-                {updateInfo.releaseNotes || 'Bug fixes and performance improvements.'}
+                {updateInfo.release_notes || 'Bug fixes and performance improvements.'}
               </div>
             </div>
           ) : (
             <div className="py-6 text-center space-y-1">
               <div className="text-emerald-600 dark:text-emerald-400 font-medium">You are on the latest version!</div>
               <div className="font-mono text-[11px] text-ink-secondaryLight dark:text-ink-secondaryDark">
-                Version {updateInfo?.currentVersion || '1.0.0'}
+                Version {updateInfo?.current_version || '1.0.0'}
               </div>
             </div>
           )}
@@ -82,7 +82,7 @@ export const UpdateDialog: React.FC = () => {
           </button>
           {updateInfo?.has_update && (
             <a
-              href={updateInfo.downloadURL || updateInfo.releaseURL}
+              href={updateInfo.download_url || updateInfo.release_url}
               target="_blank"
               rel="noreferrer"
               className="px-4 py-1.5 rounded-panel bg-brand-light dark:bg-brand-dark text-white text-xs font-semibold shadow hover:opacity-95 text-center"

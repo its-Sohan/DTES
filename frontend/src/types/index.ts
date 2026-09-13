@@ -11,13 +11,13 @@ export interface QueueItem {
   file_path: string;
   file_name: string;
   file_size_str: string;
-  status: 'Ready' | 'Processing' | 'Done' | 'Failed';
+  status: 'Ready' | 'Processing' | 'Done' | 'Failed' | string;
   extracted_text: string;
   error_message: string;
-  source: 'upload' | 'scanner' | 'clipboard';
-  output_mode: 'document' | 'spreadsheet' | 'key_value' | 'raw_text';
+  source: 'upload' | 'scanner' | 'clipboard' | string;
+  output_mode: 'document' | 'spreadsheet' | 'key_value' | 'raw_text' | string;
   block_boxes?: BoundingBox[];
-  created_at?: string;
+  created_at?: any;
 }
 
 export interface UsageStats {
@@ -34,8 +34,8 @@ export interface Config {
   base_url: string;
   model_name: string;
   auto_extract: boolean;
-  default_output_mode: 'document' | 'spreadsheet' | 'key_value' | 'raw_text';
-  quality: 'standard' | 'high';
+  default_output_mode: 'document' | 'spreadsheet' | 'key_value' | 'raw_text' | string;
+  quality: 'standard' | 'high' | string;
   releases_repo: string;
   check_updates_on_startup: boolean;
   usage_stats: UsageStats;

@@ -88,10 +88,10 @@ export async function initApp() {
     const initialSelected = history.length > 0 ? history[0].id : null;
 
     setState({
-      config: loadedConfig,
-      activeOutputMode: loadedConfig.default_output_mode || 'document',
-      activeQuality: loadedConfig.quality || 'standard',
-      queue: history,
+      config: loadedConfig as any,
+      activeOutputMode: (loadedConfig.default_output_mode as any) || 'document',
+      activeQuality: (loadedConfig.quality as any) || 'standard',
+      queue: history as any,
       selectedItemId: initialSelected,
     });
 
@@ -149,7 +149,7 @@ export function addItems(newItems: QueueItem[]) {
   const updatedQueue = [...state.queue, ...newItems];
   const selected = state.selectedItemId || newItems[0].id;
   setState({ queue: updatedQueue, selectedItemId: selected });
-  api.SaveHistory(updatedQueue);
+  api.SaveHistory(updatedQueue as any);
 
   if (state.config.auto_extract) {
     for (const item of newItems) {
@@ -165,14 +165,14 @@ export function removeItem(id: string) {
     newSelected = updatedQueue.length > 0 ? updatedQueue[0].id : null;
   }
   setState({ queue: updatedQueue, selectedItemId: newSelected });
-  api.SaveHistory(updatedQueue);
+  api.SaveHistory(updatedQueue as any);
 }
 
 export function clearCompleted() {
   const updatedQueue = state.queue.filter((i) => i.status !== 'Done');
   const newSelected = updatedQueue.length > 0 ? updatedQueue[0].id : null;
   setState({ queue: updatedQueue, selectedItemId: newSelected });
-  api.SaveHistory(updatedQueue);
+  api.SaveHistory(updatedQueue as any);
 }
 
 export function updateItem(id: string, partial: Partial<QueueItem>) {
@@ -183,7 +183,7 @@ export function updateItem(id: string, partial: Partial<QueueItem>) {
     return item;
   });
   setState({ queue: updatedQueue });
-  api.SaveHistory(updatedQueue);
+  api.SaveHistory(updatedQueue as any);
 }
 
 export async function extractItem(item: QueueItem) {

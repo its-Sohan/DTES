@@ -16,7 +16,7 @@ export const SettingsModal: React.FC = () => {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await api.SaveConfig(formData);
+      await api.SaveConfig(formData as any);
       setState({ config: formData });
       setModal('none');
     } catch (err: any) {
