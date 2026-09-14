@@ -16,6 +16,7 @@ export interface AppState {
   sidebarOpen: boolean;
   statusMessage: string;
   activeModal: 'none' | 'settings' | 'dashboard' | 'command_palette' | 'update' | 'help';
+  appVersion: string;
 }
 
 const initialConfig: Config = {
@@ -26,7 +27,7 @@ const initialConfig: Config = {
   auto_extract: true,
   default_output_mode: 'document',
   quality: 'standard',
-  releases_repo: 'its-Sohan/itt-ocr-release',
+  releases_repo: 'its-Sohan/DTES',
   check_updates_on_startup: true,
   usage_stats: {
     total_scanned_or_uploaded: 0,
@@ -51,6 +52,7 @@ let state: AppState = {
   sidebarOpen: true,
   statusMessage: 'Ready',
   activeModal: 'none',
+  appVersion: '0.1.3',
 };
 
 const listeners = new Set<() => void>();
@@ -85,6 +87,7 @@ export async function initApp() {
   try {
     const loadedConfig = await api.GetConfig();
     const history = await api.LoadHistory();
+    const verInfo = await api.GetVersionInfo().catch(() => null);
     const initialSelected = history.length > 0 ? history[0].id : null;
 
     setState({
@@ -93,6 +96,7 @@ export async function initApp() {
       activeQuality: (loadedConfig.quality as any) || 'standard',
       queue: history as any,
       selectedItemId: initialSelected,
+      appVersion: verInfo?.version || '0.1.3',
     });
 
     if (loadedConfig.check_updates_on_startup) {

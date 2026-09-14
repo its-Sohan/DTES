@@ -38,6 +38,10 @@ export function GetVersionInfo() {
   return window['go']['main']['App']['GetVersionInfo']();
 }
 
+export function InstallUpdate(arg1) {
+  return window['go']['main']['App']['InstallUpdate'](arg1);
+}
+
 export function LoadHistory() {
   return window['go']['main']['App']['LoadHistory']();
 }
@@ -46,8 +50,16 @@ export function LoadPreview(arg1) {
   return window['go']['main']['App']['LoadPreview'](arg1);
 }
 
+export function OpenBrowserURL(arg1) {
+  return window['go']['main']['App']['OpenBrowserURL'](arg1);
+}
+
 export function PickFiles() {
   return window['go']['main']['App']['PickFiles']();
+}
+
+export function QuitApplication() {
+  return window['go']['main']['App']['QuitApplication']();
 }
 
 export function ResetUsageStats() {

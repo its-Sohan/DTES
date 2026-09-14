@@ -22,11 +22,17 @@ export function GetUsageStats():Promise<types.UsageStats>;
 
 export function GetVersionInfo():Promise<version.Info>;
 
+export function InstallUpdate(arg1:string):Promise<void>;
+
 export function LoadHistory():Promise<Array<types.QueueItem>>;
 
 export function LoadPreview(arg1:string):Promise<types.DocumentPreview>;
 
+export function OpenBrowserURL(arg1:string):Promise<void>;
+
 export function PickFiles():Promise<Array<types.QueueItem>>;
+
+export function QuitApplication():Promise<void>;
 
 export function ResetUsageStats():Promise<types.UsageStats>;
 

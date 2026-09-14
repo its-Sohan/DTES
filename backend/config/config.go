@@ -71,7 +71,7 @@ func DefaultConfig() types.Config {
 		AutoExtract:         true,
 		DefaultOutputMode:   string(types.OutputModeDocument),
 		Quality:             string(types.QualityStandard),
-		ReleasesRepo:        "its-Sohan/itt-ocr-release",
+		ReleasesRepo:        "its-Sohan/DTES",
 		CheckUpdatesStartup: true,
 		UsageStats:          types.UsageStats{},
 	}
@@ -96,7 +96,7 @@ func withDefaults(cfg types.Config) types.Config {
 	if !types.IsValidQuality(cfg.Quality) {
 		cfg.Quality = def.Quality
 	}
-	if cfg.ReleasesRepo == "" {
+	if cfg.ReleasesRepo == "" || cfg.ReleasesRepo == "its-Sohan/itt-ocr-release" || cfg.ReleasesRepo == "its-Sohan/itt-ocr-releases" {
 		cfg.ReleasesRepo = def.ReleasesRepo
 	}
 	return cfg

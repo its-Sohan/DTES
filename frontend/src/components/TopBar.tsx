@@ -4,7 +4,7 @@ import appIconLight from '../assets/app_icon.svg';
 import appIconDark from '../assets/app_icon_dark.svg';
 
 export const TopBar: React.FC = () => {
-  const { themeMode, statusMessage, isExtracting, queue } = useAppStore();
+  const { themeMode, statusMessage, isExtracting, queue, appVersion } = useAppStore();
 
   const isDark = themeMode === 'dark';
   const appIcon = isDark ? appIconDark : appIconLight;
@@ -28,9 +28,13 @@ export const TopBar: React.FC = () => {
           <span className="font-semibold text-sm tracking-tight text-ink-primaryLight dark:text-ink-primaryDark">
             ITT OCR
           </span>
-          <span className="text-[8px] font-mono text-ink-secondaryLight/60 dark:text-ink-secondaryDark/60">
-            v1.0
-          </span>
+          <button
+            onClick={() => setModal('update')}
+            title="Check for software updates"
+            className="text-[10px] font-mono px-1 py-0.5 rounded bg-inset-light dark:bg-inset-dark text-ink-secondaryLight dark:text-ink-secondaryDark hover:text-brand-light dark:hover:text-brand-dark border border-hairline-light/50 dark:border-hairline-dark/50 transition-colors"
+          >
+            v{appVersion || '0.1.3'}
+          </button>
         </div>
       </div>
 

@@ -113,6 +113,13 @@ export const CommandPaletteModal: React.FC = () => {
       perform: () => setModal('dashboard'),
     },
     {
+      id: 'update',
+      title: 'Check for software updates',
+      category: 'App',
+      shortcut: 'Ctrl+U',
+      perform: () => setModal('update'),
+    },
+    {
       id: 'help',
       title: 'Help Center & OCR guide',
       category: 'Help',

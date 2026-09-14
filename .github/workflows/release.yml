@@ -68,7 +68,13 @@ jobs:
       - name: Build Linux executable
         if: runner.os == 'Linux'
         run: |
-          wails build -clean -platform ${{ matrix.platform }}
+          APP_VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "$GITHUB_REF" != refs/tags/* ]]; then
+            APP_VERSION="$(git describe --tags --always 2>/dev/null | sed 's/^v//' || echo '0.1.3')"
+          fi
+          BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          LDFLAGS="-s -w -X itt-ocr/backend/version.Version=${APP_VERSION} -X itt-ocr/backend/version.Commit=${GITHUB_SHA} -X itt-ocr/backend/version.BuildDate=${BUILD_DATE}"
+          wails build -clean -platform ${{ matrix.platform }} -ldflags "$LDFLAGS"
           cp build/bin/itt-ocr build/bin/${{ matrix.artifact }}
 
       - name: Install NSIS
@@ -82,7 +88,23 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          wails build -clean -nsis -platform ${{ matrix.platform }}
+          $appVersion = $env:GITHUB_REF_NAME
+          if ($appVersion -match '^v?(.*)$') {
+            $appVersion = $matches[1]
+          }
+          if ($env:GITHUB_REF -notmatch '^refs/tags/') {
+            try {
+              $describe = git describe --tags --always
+              if ($describe -match '^v?(.*)$') {
+                $appVersion = $matches[1]
+              }
+            } catch {
+              $appVersion = "0.1.3"
+            }
+          }
+          $buildDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+          $ldflags = "-s -w -X itt-ocr/backend/version.Version=$appVersion -X itt-ocr/backend/version.Commit=$env:GITHUB_SHA -X itt-ocr/backend/version.BuildDate=$buildDate"
+          wails build -clean -nsis -platform ${{ matrix.platform }} -ldflags $ldflags
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
