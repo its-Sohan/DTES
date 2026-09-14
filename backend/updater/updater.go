@@ -7,6 +7,7 @@
 package updater
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -347,18 +348,122 @@ func DownloadAndInstall(ctx context.Context, downloadURL string, onProgress func
 		_ = os.Chmod(tempPath, 0755)
 	}
 
+	runPath := tempPath
+
+	// If the downloaded asset is a zip archive, extract it and locate the executable/installer inside
+	if strings.HasSuffix(strings.ToLower(tempPath), ".zip") {
+		extractDir := filepath.Join(tempDir, fmt.Sprintf("itt-ocr-extracted-%d", time.Now().Unix()))
+		if err := unzipFile(tempPath, extractDir); err != nil {
+			return fmt.Errorf("unzip update archive: %w", err)
+		}
+		foundExe := findExecutableInDir(extractDir)
+		if foundExe != "" {
+			runPath = foundExe
+			if runtime.GOOS != "windows" {
+				_ = os.Chmod(runPath, 0755)
+			}
+		}
+	}
+
 	// Launch installer / executable detached
 	if runtime.GOOS == "windows" {
 		cmd := exec.Command(tempPath)
+		cmd := exec.Command(runPath)
 		if err := cmd.Start(); err != nil {
 			return fmt.Errorf("launch installer: %w", err)
 		}
 	} else if runtime.GOOS == "darwin" {
 		_ = exec.Command("open", tempPath).Start()
+		_ = exec.Command("open", runPath).Start()
 	} else {
 		// Linux: open containing directory
 		_ = exec.Command("xdg-open", filepath.Dir(tempPath)).Start()
+		// Linux: open containing directory or run
+		if strings.HasSuffix(strings.ToLower(runPath), ".appimage") || !strings.Contains(filepath.Base(runPath), ".") {
+			_ = exec.Command(runPath).Start()
+		} else {
+			_ = exec.Command("xdg-open", filepath.Dir(runPath)).Start()
+		}
 	}
 
 	return nil
+}
+
+func unzipFile(srcZip, destDir string) error {
+	r, err := zip.OpenReader(srcZip)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return err
+	}
+
+	for _, f := range r.File {
+		targetPath := filepath.Join(destDir, f.Name)
+		// Protect against Zip Slip vulnerabilities
+		cleanDest := filepath.Clean(destDir) + string(os.PathSeparator)
+		if !strings.HasPrefix(filepath.Clean(targetPath)+string(os.PathSeparator), cleanDest) &&
+			filepath.Clean(targetPath) != filepath.Clean(destDir) {
+			continue
+		}
+
+		if f.FileInfo().IsDir() {
+			_ = os.MkdirAll(targetPath, 0755)
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			return err
+		}
+
+		outFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		if err != nil {
+			return err
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			outFile.Close()
+			return err
+		}
+
+		_, err = io.Copy(outFile, rc)
+		rc.Close()
+		outFile.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func findExecutableInDir(dir string) string {
+	var candidate string
+	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		name := strings.ToLower(info.Name())
+		if runtime.GOOS == "windows" {
+			if strings.HasSuffix(name, ".exe") {
+				// Strongly prefer installer/setup executable
+				if strings.Contains(name, "installer") || strings.Contains(name, "setup") {
+					candidate = path
+					return filepath.SkipAll
+				}
+				if candidate == "" {
+					candidate = path
+				}
+			}
+		} else {
+			if info.Mode()&0111 != 0 {
+				candidate = path
+				return filepath.SkipAll
+			}
+		}
+		return nil
+	})
+	return candidate
 }

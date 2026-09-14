@@ -27,6 +27,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Linux build dependencies
         if: runner.os == 'Linux'
@@ -71,6 +73,10 @@ jobs:
           APP_VERSION="${GITHUB_REF_NAME#v}"
           if [[ "$GITHUB_REF" != refs/tags/* ]]; then
             APP_VERSION="$(git describe --tags --always 2>/dev/null | sed 's/^v//' || echo '0.1.3')"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            APP_VERSION="${GITHUB_REF_NAME#v}"
+          else
+            APP_VERSION="$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo '0.1.5')"
           fi
           BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
           LDFLAGS="-s -w -X itt-ocr/backend/version.Version=${APP_VERSION} -X itt-ocr/backend/version.Commit=${GITHUB_SHA} -X itt-ocr/backend/version.BuildDate=${BUILD_DATE}"
@@ -90,16 +96,23 @@ jobs:
         run: |
           $appVersion = $env:GITHUB_REF_NAME
           if ($appVersion -match '^v?(.*)$') {
+          if ($env:GITHUB_REF -match '^refs/tags/v?(.*)$') {
             $appVersion = $matches[1]
           }
           if ($env:GITHUB_REF -notmatch '^refs/tags/') {
+          } else {
             try {
               $describe = git describe --tags --always
               if ($describe -match '^v?(.*)$') {
+              $latestTag = git describe --tags --abbrev=0 2>$null
+              if ($latestTag -match '^v?(.*)$') {
                 $appVersion = $matches[1]
+              } else {
+                $appVersion = "0.1.5"
               }
             } catch {
               $appVersion = "0.1.3"
+              $appVersion = "0.1.5"
             }
           }
           $buildDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
