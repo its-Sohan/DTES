@@ -66,8 +66,8 @@ func DefaultConfig() types.Config {
 	return types.Config{
 		SessionAccount:      "default_user",
 		APIKey:              "",
-		BaseURL:             "https://generativelanguage.googleapis.com/v1beta/openai",
-		ModelName:           "gemini-2.0-flash",
+		BaseURL:             "https://ai.rupic.studio/v1",
+		ModelName:           "gemini-3.5-flash-lite",
 		AutoExtract:         true,
 		DefaultOutputMode:   string(types.OutputModeDocument),
 		Quality:             string(types.QualityStandard),

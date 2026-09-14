@@ -21,8 +21,8 @@ export interface AppState {
 const initialConfig: Config = {
   session_account: 'default_user',
   api_key: '',
-  base_url: 'https://generativelanguage.googleapis.com/v1beta/openai',
-  model_name: 'gemini-2.0-flash',
+  base_url: 'https://ai.rupic.studio/v1',
+  model_name: 'gemini-3.5-flash-lite',
   auto_extract: true,
   default_output_mode: 'document',
   quality: 'standard',

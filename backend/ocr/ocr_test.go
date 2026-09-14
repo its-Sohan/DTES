@@ -55,7 +55,7 @@ func TestResolveChatEndpoint(t *testing.T) {
 		{"openai base", "https://api.openai.com/v1", "https://api.openai.com/v1/chat/completions"},
 		{"trailing slash", "https://api.openai.com/v1/", "https://api.openai.com/v1/chat/completions"},
 		{"surrounding space", "  https://api.openai.com/v1  ", "https://api.openai.com/v1/chat/completions"},
-		{"empty falls back to gemini", "", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"},
+		{"empty falls back to default", "", "https://ai.rupic.studio/v1/chat/completions"},
 		{
 			"already a full route is untouched",
 			"https://openrouter.ai/api/v1/chat/completions",
@@ -124,7 +124,7 @@ func TestResolveModel(t *testing.T) {
 	}{
 		{"standard keeps configured model", "gpt-4o-mini", "standard", "gpt-4o-mini"},
 		{"high upgrades a known model", "gpt-4o-mini", "high", "gpt-4o"},
-		{"empty falls back to a default", "", "standard", "gemini-2.0-flash"},
+		{"empty falls back to a default", "", "standard", "gemini-3.5-flash-lite"},
 		{"whitespace is trimmed", "  gpt-4o  ", "standard", "gpt-4o"},
 		// The important cases: a custom or self-hosted model must survive.
 		{"custom model kept on standard", "my-local-vision:7b", "standard", "my-local-vision:7b"},
