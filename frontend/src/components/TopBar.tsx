@@ -23,12 +23,12 @@ export const TopBar: React.FC = () => {
           </svg>
         </button>
 
-        <div className="flex items-center space-x-2">
-          <img src={appIcon} alt="ITT OCR" className="w-5 h-5 object-contain" />
+        <div className="flex items-baseline space-x-1.5">
+          <img src={appIcon} alt="ITT OCR" className="w-4 h-4 object-contain self-center" />
           <span className="font-semibold text-sm tracking-tight text-ink-primaryLight dark:text-ink-primaryDark">
             ITT OCR
           </span>
-          <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-inset-light dark:bg-inset-dark text-ink-secondaryLight dark:text-ink-secondaryDark border border-hairline-light dark:border-hairline-dark">
+          <span className="text-[8px] font-mono text-ink-secondaryLight/60 dark:text-ink-secondaryDark/60">
             v1.0
           </span>
         </div>
@@ -46,21 +46,11 @@ export const TopBar: React.FC = () => {
             </svg>
             <span>Search actions & commands...</span>
           </div>
-          <kbd className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-surface-light dark:bg-surface-dark border border-hairline-light dark:border-hairline-dark">
-            Ctrl K
-          </kbd>
         </button>
       </div>
 
       {/* Right Controls */}
       <div className="flex items-center space-x-2">
-        {/* Status Pill */}
-        <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-panel bg-inset-light dark:bg-inset-dark border border-hairline-light dark:border-hairline-dark text-xs font-mono">
-          <span className={`w-1.5 h-1.5 rounded-full ${isExtracting ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'}`} />
-          <span className="text-ink-secondaryLight dark:text-ink-secondaryDark truncate max-w-[130px]">
-            {isExtracting ? 'Processing' : statusMessage}
-          </span>
-        </div>
 
         {/* Dashboard Metrics */}
         <button

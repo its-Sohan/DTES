@@ -174,20 +174,24 @@ export const PreviewPanel: React.FC = () => {
         ) : (
           /* Empty State Invitation */
           <div className="flex flex-col items-center justify-center p-8 text-center max-w-sm">
-            <div className="w-14 h-14 rounded-full bg-brand-light/10 dark:bg-brand-dark/15 border border-brand-light/20 dark:border-brand-dark/30 flex items-center justify-center mb-3">
-              <svg className="w-6 h-6 text-brand-light dark:text-brand-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
+            <svg className="w-10 h-10 text-brand-light dark:text-brand-dark mb-3 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
             <h3 className="text-sm font-semibold text-ink-primaryLight dark:text-ink-primaryDark mb-1">
               No document selected
             </h3>
             <p className="text-xs text-ink-secondaryLight dark:text-ink-secondaryDark mb-4">
               Select an item from the queue or upload a document to inspect preview and run OCR.
             </p>
-            <span className="font-mono text-[10px] uppercase px-3 py-1 rounded-full border border-hairline-light dark:border-hairline-dark bg-surface-light dark:bg-surface-dark text-ink-secondaryLight dark:text-ink-secondaryDark">
-              PNG · JPG · WebP · PDF
-            </span>
+            <div className="flex items-center space-x-2 text-[10px] font-mono tracking-wider text-ink-secondaryLight/60 dark:text-ink-secondaryDark/60 uppercase">
+              <span>PNG</span>
+              <span className="text-[8px] opacity-40">/</span>
+              <span>JPG</span>
+              <span className="text-[8px] opacity-40">/</span>
+              <span>WEBP</span>
+              <span className="text-[8px] opacity-40">/</span>
+              <span>PDF</span>
+            </div>
           </div>
         )}
       </div>

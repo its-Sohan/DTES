@@ -23,6 +23,7 @@ export const TextPanel: React.FC = () => {
 
   const [copied, setCopied] = useState<boolean>(false);
   const [exportOpen, setExportOpen] = useState<boolean>(false);
+  const [transformOpen, setTransformOpen] = useState<boolean>(false);
 
   const selectedItem = queue.find((i) => i.id === selectedItemId);
   const extractedText = selectedItem?.extracted_text || '';
@@ -126,17 +127,48 @@ export const TextPanel: React.FC = () => {
 
         {/* Quality & Primary Action */}
         <div className="flex items-center justify-between space-x-2">
-          {/* Quality Select */}
-          <div className="flex items-center space-x-1.5 text-xs text-ink-secondaryLight dark:text-ink-secondaryDark">
-            <span className="font-mono text-[10px] uppercase">Quality:</span>
-            <select
-              value={activeQuality}
-              onChange={(e) => setQuality(e.target.value as any)}
-              className="text-xs bg-inset-light dark:bg-inset-dark border border-hairline-light dark:border-hairline-dark rounded px-2 py-1 text-ink-primaryLight dark:text-ink-primaryDark outline-none cursor-pointer"
-            >
-              <option value="standard">Standard (Fast)</option>
-              <option value="high">High Precision (Gemini 3.7)</option>
-            </select>
+          {/* Quality Pure Typography & Color Switch */}
+          <div className="flex items-center space-x-3 text-xs">
+            <span className="font-mono text-[10px] text-ink-secondaryLight/50 dark:text-ink-secondaryDark/50 uppercase">
+              Quality
+            </span>
+            <div className="flex items-center space-x-2.5">
+              <button
+                type="button"
+                onClick={() => setQuality('standard')}
+                className={`flex items-center space-x-1.5 transition-all ${
+                  activeQuality === 'standard'
+                    ? 'text-ink-primaryLight dark:text-ink-primaryDark font-semibold'
+                    : 'text-ink-secondaryLight/50 dark:text-ink-secondaryDark/50 hover:text-ink-secondaryLight dark:hover:text-ink-secondaryDark'
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full transition-all ${
+                    activeQuality === 'standard' ? 'bg-brand-light dark:bg-brand-dark scale-100' : 'bg-transparent scale-0'
+                  }`}
+                />
+                <span>Standard</span>
+              </button>
+
+              <span className="text-ink-secondaryLight/20 dark:text-ink-secondaryDark/20 font-mono text-[10px]">/</span>
+
+              <button
+                type="button"
+                onClick={() => setQuality('high')}
+                className={`flex items-center space-x-1.5 transition-all ${
+                  activeQuality === 'high'
+                    ? 'text-brand-light dark:text-brand-dark font-semibold'
+                    : 'text-ink-secondaryLight/50 dark:text-ink-secondaryDark/50 hover:text-ink-secondaryLight dark:hover:text-ink-secondaryDark'
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full transition-all ${
+                    activeQuality === 'high' ? 'bg-brand-light dark:bg-brand-dark scale-100' : 'bg-transparent scale-0'
+                  }`}
+                />
+                <span>High Precision</span>
+              </button>
+            </div>
           </div>
 
           {/* Extract Button */}
@@ -204,10 +236,74 @@ export const TextPanel: React.FC = () => {
             <span className="text-[11px]">{copied ? 'Copied!' : 'Copy'}</span>
           </button>
 
+          {/* Transform Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setTransformOpen(!transformOpen);
+                setExportOpen(false);
+              }}
+              disabled={!extractedText}
+              className="flex items-center space-x-1 px-2 py-1 rounded border border-hairline-light dark:border-hairline-dark bg-surface-light dark:bg-surface-dark text-ink-secondaryLight dark:text-ink-secondaryDark hover:text-ink-primaryLight dark:hover:text-ink-primaryDark disabled:opacity-40 transition-colors"
+            >
+              <span className="text-[11px]">Transform</span>
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {transformOpen && (
+              <div className="absolute right-0 top-full mt-1 w-44 rounded-panel border border-hairline-light dark:border-hairline-dark bg-surface-light dark:bg-surface-dark shadow-xl py-1 z-30 text-xs">
+                <button
+                  onClick={() => {
+                    handleTransform('digits_to_english');
+                    setTransformOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-ink-primaryLight dark:text-ink-primaryDark hover:bg-inset-light dark:hover:bg-inset-dark transition-colors flex items-center justify-between"
+                >
+                  <span>Numerals to English</span>
+                  <span className="font-mono text-[10px] text-ink-secondaryLight/60 dark:text-ink-secondaryDark/60">০→0</span>
+                </button>
+                <button
+                  onClick={() => {
+                    handleTransform('digits_to_bengali');
+                    setTransformOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-ink-primaryLight dark:text-ink-primaryDark hover:bg-inset-light dark:hover:bg-inset-dark transition-colors flex items-center justify-between"
+                >
+                  <span>Numerals to Bengali</span>
+                  <span className="font-mono text-[10px] text-ink-secondaryLight/60 dark:text-ink-secondaryDark/60">0→০</span>
+                </button>
+                <div className="my-1 border-t border-hairline-light dark:border-hairline-dark" />
+                <button
+                  onClick={() => {
+                    handleTransform('unwrap_lines');
+                    setTransformOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-ink-primaryLight dark:text-ink-primaryDark hover:bg-inset-light dark:hover:bg-inset-dark transition-colors"
+                >
+                  Unwrap Margins
+                </button>
+                <button
+                  onClick={() => {
+                    handleTransform('clean_tables');
+                    setTransformOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-ink-primaryLight dark:text-ink-primaryDark hover:bg-inset-light dark:hover:bg-inset-dark transition-colors"
+                >
+                  Align Markdown Tables
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Export Dropdown */}
           <div className="relative">
             <button
-              onClick={() => setExportOpen(!exportOpen)}
+              onClick={() => {
+                setExportOpen(!exportOpen);
+                setTransformOpen(false);
+              }}
               disabled={!extractedText}
               className="flex items-center space-x-1 px-2 py-1 rounded border border-hairline-light dark:border-hairline-dark bg-surface-light dark:bg-surface-dark text-ink-secondaryLight dark:text-ink-secondaryDark hover:text-ink-primaryLight dark:hover:text-ink-primaryDark disabled:opacity-40 transition-colors"
             >
@@ -231,41 +327,6 @@ export const TextPanel: React.FC = () => {
               </div>
             )}
           </div>
-        </div>
-      </div>
-
-      {/* Post-Processing Deterministic Tools Bar */}
-      <div className="px-3 py-1.5 border-b border-hairline-light dark:border-hairline-dark flex items-center justify-between overflow-x-auto text-[11px] font-mono text-ink-secondaryLight dark:text-ink-secondaryDark bg-inset-light/30 dark:bg-inset-dark/30">
-        <span className="uppercase text-[9px] mr-1">Tools:</span>
-        <div className="flex items-center space-x-1.5">
-          <button
-            onClick={() => handleTransform('digits_to_english')}
-            title="Convert Bengali numerals (০-৯) to standard 0-9"
-            className="hover:text-brand-light dark:hover:text-brand-dark px-1.5 py-0.5 rounded border border-hairline-light/50 dark:border-hairline-dark/50"
-          >
-            ০-৯ → 0-9
-          </button>
-          <button
-            onClick={() => handleTransform('digits_to_bengali')}
-            title="Convert Arabic numerals (0-9) to Bengali ০-৯"
-            className="hover:text-brand-light dark:hover:text-brand-dark px-1.5 py-0.5 rounded border border-hairline-light/50 dark:border-hairline-dark/50"
-          >
-            0-9 → ০-৯
-          </button>
-          <button
-            onClick={() => handleTransform('unwrap_lines')}
-            title="Unwrap artificial line breaks from scanner margins"
-            className="hover:text-brand-light dark:hover:text-brand-dark px-1.5 py-0.5 rounded border border-hairline-light/50 dark:border-hairline-dark/50"
-          >
-            Unwrap
-          </button>
-          <button
-            onClick={() => handleTransform('clean_tables')}
-            title="Format and align markdown table pipes"
-            className="hover:text-brand-light dark:hover:text-brand-dark px-1.5 py-0.5 rounded border border-hairline-light/50 dark:border-hairline-dark/50"
-          >
-            Align Table
-          </button>
         </div>
       </div>
 
