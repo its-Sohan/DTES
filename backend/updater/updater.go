@@ -367,17 +367,13 @@ func DownloadAndInstall(ctx context.Context, downloadURL string, onProgress func
 
 	// Launch installer / executable detached
 	if runtime.GOOS == "windows" {
-		cmd := exec.Command(tempPath)
 		cmd := exec.Command(runPath)
 		if err := cmd.Start(); err != nil {
 			return fmt.Errorf("launch installer: %w", err)
 		}
 	} else if runtime.GOOS == "darwin" {
-		_ = exec.Command("open", tempPath).Start()
 		_ = exec.Command("open", runPath).Start()
 	} else {
-		// Linux: open containing directory
-		_ = exec.Command("xdg-open", filepath.Dir(tempPath)).Start()
 		// Linux: open containing directory or run
 		if strings.HasSuffix(strings.ToLower(runPath), ".appimage") || !strings.Contains(filepath.Base(runPath), ".") {
 			_ = exec.Command(runPath).Start()

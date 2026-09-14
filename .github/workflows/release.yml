@@ -70,9 +70,6 @@ jobs:
       - name: Build Linux executable
         if: runner.os == 'Linux'
         run: |
-          APP_VERSION="${GITHUB_REF_NAME#v}"
-          if [[ "$GITHUB_REF" != refs/tags/* ]]; then
-            APP_VERSION="$(git describe --tags --always 2>/dev/null | sed 's/^v//' || echo '0.1.3')"
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             APP_VERSION="${GITHUB_REF_NAME#v}"
           else
@@ -95,15 +92,10 @@ jobs:
         shell: pwsh
         run: |
           $appVersion = $env:GITHUB_REF_NAME
-          if ($appVersion -match '^v?(.*)$') {
           if ($env:GITHUB_REF -match '^refs/tags/v?(.*)$') {
             $appVersion = $matches[1]
-          }
-          if ($env:GITHUB_REF -notmatch '^refs/tags/') {
           } else {
             try {
-              $describe = git describe --tags --always
-              if ($describe -match '^v?(.*)$') {
               $latestTag = git describe --tags --abbrev=0 2>$null
               if ($latestTag -match '^v?(.*)$') {
                 $appVersion = $matches[1]
@@ -111,7 +103,6 @@ jobs:
                 $appVersion = "0.1.5"
               }
             } catch {
-              $appVersion = "0.1.3"
               $appVersion = "0.1.5"
             }
           }
