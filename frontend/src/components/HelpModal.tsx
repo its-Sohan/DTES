@@ -80,7 +80,6 @@ export const HelpModal: React.FC = () => {
               <li><strong>০-৯ ↔ 0-9</strong>: Instant 100% deterministic numeral translation.</li>
               <li><strong>Unwrap Lines</strong>: Heuristically joins newspaper and scanner margin wraps while strictly preserving bullet points, tables, and markdown headers.</li>
               <li><strong>Align Tables</strong>: Uniformly formats markdown ASCII table columns.</li>
-              <li><strong>Audit Math</strong>: Locally sums invoice line items against taxes and subtotals to verify stated grand totals without sending data to an LLM.</li>
             </ul>
           </div>
         </div>

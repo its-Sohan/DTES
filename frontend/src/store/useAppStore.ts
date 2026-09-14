@@ -21,8 +21,8 @@ export interface AppState {
 const initialConfig: Config = {
   session_account: 'default_user',
   api_key: '',
-  base_url: 'https://api.openai.com/v1',
-  model_name: 'gpt-4o-mini',
+  base_url: 'https://generativelanguage.googleapis.com/v1beta/openai',
+  model_name: 'gemini-2.0-flash',
   auto_extract: true,
   default_output_mode: 'document',
   quality: 'standard',

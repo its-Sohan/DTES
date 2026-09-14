@@ -9,7 +9,6 @@ import {
   setActiveBlockIndex,
 } from '../store/useAppStore';
 import * as api from '../../wailsjs/go/main/App';
-import { InvoiceValidationResult } from '../types';
 
 export const TextPanel: React.FC = () => {
   const {
@@ -24,7 +23,6 @@ export const TextPanel: React.FC = () => {
 
   const [copied, setCopied] = useState<boolean>(false);
   const [exportOpen, setExportOpen] = useState<boolean>(false);
-  const [mathResult, setMathResult] = useState<InvoiceValidationResult | null>(null);
 
   const selectedItem = queue.find((i) => i.id === selectedItemId);
   const extractedText = selectedItem?.extracted_text || '';
@@ -47,16 +45,6 @@ export const TextPanel: React.FC = () => {
       updateItem(selectedItem.id, { extracted_text: transformed });
     } catch (err) {
       console.error('Transform failed:', err);
-    }
-  };
-
-  const handleCheckMath = async () => {
-    if (!extractedText) return;
-    try {
-      const res = await api.CheckInvoiceMath(extractedText);
-      setMathResult(res);
-    } catch (err) {
-      console.error('Invoice math check failed:', err);
     }
   };
 
@@ -112,8 +100,8 @@ export const TextPanel: React.FC = () => {
     <div className="w-[520px] flex flex-col h-full bg-surface-light dark:bg-surface-dark border-l border-hairline-light dark:border-hairline-dark select-none">
       {/* Top Controls: Modes & Primary Extract */}
       <div className="p-3 border-b border-hairline-light dark:border-hairline-dark space-y-2.5">
-        {/* Mode Selector Tabs */}
-        <div className="flex items-center space-x-1 p-0.5 rounded-panel bg-inset-light dark:bg-inset-dark border border-hairline-light dark:border-hairline-dark text-xs">
+        {/* Mode Selector Buttons */}
+        <div className="flex items-center p-1 rounded-md bg-inset-light dark:bg-inset-dark border border-hairline-light dark:border-hairline-dark text-xs gap-1">
           {[
             { id: 'document', label: 'Document' },
             { id: 'spreadsheet', label: 'Spreadsheet' },
@@ -125,11 +113,10 @@ export const TextPanel: React.FC = () => {
               <button
                 key={m.id}
                 onClick={() => setOutputMode(m.id as any)}
-                className={`flex-1 py-1 rounded-[4px] font-medium transition-all ${
-                  isActive
-                    ? 'bg-surface-light dark:bg-surface-dark text-brand-light dark:text-brand-dark shadow-sm'
-                    : 'text-ink-secondaryLight dark:text-ink-secondaryDark hover:text-ink-primaryLight dark:hover:text-ink-primaryDark'
-                }`}
+                className={`flex-1 py-1 px-2.5 rounded text-xs font-medium transition-all duration-150 ${isActive
+                  ? 'bg-brand-light dark:bg-brand-dark text-white shadow-sm font-semibold'
+                  : 'text-ink-secondaryLight dark:text-ink-secondaryDark hover:text-ink-primaryLight dark:hover:text-ink-primaryDark hover:bg-surface-light/60 dark:hover:bg-surface-dark/60'
+                  }`}
               >
                 {m.label}
               </button>
@@ -184,21 +171,19 @@ export const TextPanel: React.FC = () => {
         <div className="flex items-center space-x-1">
           <button
             onClick={() => setAuditMode(false)}
-            className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
-              !auditMode
-                ? 'bg-surface-light dark:bg-surface-dark text-ink-primaryLight dark:text-ink-primaryDark border border-hairline-light dark:border-hairline-dark'
-                : 'text-ink-secondaryLight dark:text-ink-secondaryDark hover:text-ink-primaryLight dark:hover:text-ink-primaryDark'
-            }`}
+            className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${!auditMode
+              ? 'bg-surface-light dark:bg-surface-dark text-ink-primaryLight dark:text-ink-primaryDark border border-hairline-light dark:border-hairline-dark'
+              : 'text-ink-secondaryLight dark:text-ink-secondaryDark hover:text-ink-primaryLight dark:hover:text-ink-primaryDark'
+              }`}
           >
             Editor
           </button>
           <button
             onClick={() => setAuditMode(true)}
-            className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
-              auditMode
-                ? 'bg-surface-light dark:bg-surface-dark text-brand-light dark:text-brand-dark border border-brand-light/30 dark:border-brand-dark/30 font-semibold'
-                : 'text-ink-secondaryLight dark:text-ink-secondaryDark hover:text-ink-primaryLight dark:hover:text-ink-primaryDark'
-            }`}
+            className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${auditMode
+              ? 'bg-surface-light dark:bg-surface-dark text-brand-light dark:text-brand-dark border border-brand-light/30 dark:border-brand-dark/30 font-semibold'
+              : 'text-ink-secondaryLight dark:text-ink-secondaryDark hover:text-ink-primaryLight dark:hover:text-ink-primaryDark'
+              }`}
           >
             Audit Mode
           </button>
@@ -281,36 +266,9 @@ export const TextPanel: React.FC = () => {
           >
             Align Table
           </button>
-          <button
-            onClick={handleCheckMath}
-            title="Deterministically audit invoice arithmetic"
-            className="hover:text-brand-light dark:hover:text-brand-dark px-1.5 py-0.5 rounded border border-brand-light/40 dark:border-brand-dark/40 text-brand-light dark:text-brand-dark font-semibold"
-          >
-            Audit Math
-          </button>
         </div>
       </div>
 
-      {/* Math Verification Alert Banner */}
-      {mathResult && (
-        <div
-          className={`px-3 py-2 border-b text-xs flex items-center justify-between ${
-            mathResult.matched
-              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400'
-              : 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-400'
-          }`}
-        >
-          <div className="flex items-center space-x-1.5">
-            <span className="font-bold">{mathResult.matched ? '✓ Math Verified:' : '⚠ Discrepancy Found:'}</span>
-            <span>
-              Total {mathResult.total.toFixed(2)} vs Calculated {mathResult.calculated.toFixed(2)}
-            </span>
-          </div>
-          <button onClick={() => setMathResult(null)} className="p-0.5 hover:opacity-75">
-            ✕
-          </button>
-        </div>
-      )}
 
       {/* Text Area / Paragraph Blocks View */}
       <div className="flex-1 overflow-y-auto p-4 select-text">
@@ -330,19 +288,17 @@ export const TextPanel: React.FC = () => {
                   <div
                     key={idx}
                     onClick={() => setActiveBlockIndex(idx)}
-                    className={`p-3 rounded-panel border transition-all cursor-pointer ${
-                      isActive
-                        ? 'border-brand-light dark:border-brand-dark bg-inset-light dark:bg-inset-dark ring-1 ring-brand-light/30'
-                        : 'border-hairline-light dark:border-hairline-dark hover:border-brand-light/40 bg-surface-light dark:bg-surface-dark'
-                    }`}
+                    className={`p-3 rounded-panel border transition-all cursor-pointer ${isActive
+                      ? 'border-brand-light dark:border-brand-dark bg-inset-light dark:bg-inset-dark ring-1 ring-brand-light/30'
+                      : 'border-hairline-light dark:border-hairline-dark hover:border-brand-light/40 bg-surface-light dark:bg-surface-dark'
+                      }`}
                   >
                     <div className="flex items-center justify-between mb-1.5">
                       <span
-                        className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                          isActive
-                            ? 'bg-brand-light dark:bg-brand-dark text-white'
-                            : 'bg-inset-light dark:bg-inset-dark text-ink-secondaryLight dark:text-ink-secondaryDark'
-                        }`}
+                        className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded ${isActive
+                          ? 'bg-brand-light dark:bg-brand-dark text-white'
+                          : 'bg-inset-light dark:bg-inset-dark text-ink-secondaryLight dark:text-ink-secondaryDark'
+                          }`}
                       >
                         BLOCK {String(idx + 1).padStart(2, '0')}
                       </span>

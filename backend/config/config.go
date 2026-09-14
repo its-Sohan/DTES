@@ -66,8 +66,8 @@ func DefaultConfig() types.Config {
 	return types.Config{
 		SessionAccount:      "default_user",
 		APIKey:              "",
-		BaseURL:             "https://api.openai.com/v1",
-		ModelName:           "gpt-4o-mini",
+		BaseURL:             "https://generativelanguage.googleapis.com/v1beta/openai",
+		ModelName:           "gemini-2.0-flash",
 		AutoExtract:         true,
 		DefaultOutputMode:   string(types.OutputModeDocument),
 		Quality:             string(types.QualityStandard),

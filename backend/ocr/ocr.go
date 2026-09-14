@@ -18,7 +18,7 @@ import (
 )
 
 // defaultBaseURL is used when no endpoint has been configured.
-const defaultBaseURL = "https://api.openai.com/v1"
+const defaultBaseURL = "https://generativelanguage.googleapis.com/v1beta/openai"
 
 // basePrompt states the transcription contract shared by every output mode.
 const basePrompt = "You are an expert high-precision OCR and document transcription engine. " +
@@ -137,7 +137,7 @@ var highQualityUpgrades = map[string]string{
 func ResolveModel(configured, quality string) string {
 	model := strings.TrimSpace(configured)
 	if model == "" {
-		model = "gpt-4o-mini"
+		model = "gemini-2.0-flash"
 	}
 	if types.Quality(quality) == types.QualityHigh {
 		if upgraded, ok := highQualityUpgrades[model]; ok {

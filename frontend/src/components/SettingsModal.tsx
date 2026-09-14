@@ -90,37 +90,6 @@ export const SettingsModal: React.FC = () => {
             </p>
           </div>
 
-          {/* Endpoint Base URL */}
-          <div>
-            <label className="block font-medium text-ink-primaryLight dark:text-ink-primaryDark mb-1">
-              Endpoint Base URL
-            </label>
-            <input
-              type="text"
-              value={formData.base_url}
-              onChange={(e) => setFormData({ ...formData, base_url: e.target.value })}
-              placeholder="https://api.openai.com/v1"
-              className="w-full font-mono text-xs px-3 py-1.5 rounded bg-inset-light dark:bg-inset-dark border border-hairline-light dark:border-hairline-dark text-ink-primaryLight dark:text-ink-primaryDark outline-none"
-            />
-            <p className="text-[10px] text-ink-secondaryLight dark:text-ink-secondaryDark mt-0.5">
-              Google Gemini: https://generativelanguage.googleapis.com/v1beta/openai
-            </p>
-          </div>
-
-          {/* Fallback Model Name */}
-          <div>
-            <label className="block font-medium text-ink-primaryLight dark:text-ink-primaryDark mb-1">
-              Default Model Name
-            </label>
-            <input
-              type="text"
-              value={formData.model_name}
-              onChange={(e) => setFormData({ ...formData, model_name: e.target.value })}
-              placeholder="gpt-4o-mini"
-              className="w-full font-mono text-xs px-3 py-1.5 rounded bg-inset-light dark:bg-inset-dark border border-hairline-light dark:border-hairline-dark text-ink-primaryLight dark:text-ink-primaryDark outline-none"
-            />
-          </div>
-
           {/* Options Grid */}
           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-hairline-light dark:border-hairline-dark">
             <div>
