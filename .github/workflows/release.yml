@@ -1,114 +1,65 @@
-name: Build and release
+name: Build & Release Windows
 
 on:
-  workflow_dispatch:
   push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: false
+        default: 'dev-build'
 
 permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Linux
-            os: ubuntu-latest
-            platform: linux/amd64
-            artifact: itt-ocr-linux-amd64
-          - name: Windows
-            os: windows-latest
-            platform: windows/amd64
-            artifact: itt-ocr-windows-amd64
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
 
     steps:
-      - name: Check out repository
+      - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set up Linux build dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-          cache: true
+          go-version: '1.23.x'
+          check-latest: true
+          cache: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
+          node-version: '22'
+          cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install frontend dependencies
-        run: npm ci
-        working-directory: frontend
-
       - name: Install Wails CLI
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.15.0
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
-      - name: Add Go tools to PATH
-        if: runner.os == 'Linux'
-        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Install NSIS
+        run: choco install nsis --no-progress -y
 
-      - name: Add Go tools to PATH
-        if: runner.os == 'Windows'
+      - name: Build Wails App (Windows AMD64)
+        run: wails build -platform windows/amd64 -nsis -clean
+
+      - name: Verify build outputs
         shell: pwsh
         run: |
-          $goPath = go env GOPATH
-          "$goPath\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Get-ChildItem -Path build/bin -Recurse
 
-      - name: Build Linux executable
-        if: runner.os == 'Linux'
-        run: |
-          wails build -clean -platform ${{ matrix.platform }}
-          cp build/bin/itt-ocr build/bin/${{ matrix.artifact }}
-
-      - name: Build Windows executable and installer
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          wails build -clean -nsis -platform ${{ matrix.platform }}
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-          }
-          Copy-Item build/bin/itt-ocr.exe build/bin/${{ matrix.artifact }}.exe
-          $installer = Get-ChildItem build/bin/*-installer.exe | Select-Object -First 1
-          Copy-Item $installer.FullName build/bin/${{ matrix.artifact }}-installer.exe
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-          path: |
-            build/bin/${{ matrix.artifact }}
-            build/bin/${{ matrix.artifact }}.exe
-            build/bin/${{ matrix.artifact }}-installer.exe
-          if-no-files-found: error
-
-  release:
-    name: Publish GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: itt-ocr-*
-          path: release-assets
-          merge-multiple: true
-
-      - name: Publish GitHub Release
+      - name: Create Release & Upload Assets
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name || inputs.tag }}
+          name: Release ${{ github.ref_name || inputs.tag }}
+          draft: false
+          prerelease: false
           generate_release_notes: true
-          files: release-assets/*
+          files: |
+            build/bin/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

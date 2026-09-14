@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useAppStore, extractItem } from '../store/useAppStore';
+import React, { useState, useEffect, useRef } from 'react';
+import { useAppStore, extractItem, setActiveBlockIndex, setAuditMode } from '../store/useAppStore';
 import * as api from '../../wailsjs/go/main/App';
 
 export const PreviewPanel: React.FC = () => {
@@ -9,6 +9,7 @@ export const PreviewPanel: React.FC = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState<boolean>(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
 
   const selectedItem = queue.find((i) => i.id === selectedItemId);
 
@@ -56,11 +57,37 @@ export const PreviewPanel: React.FC = () => {
     setFitMode((m) => (m === 'contain' ? 'cover' : 'contain'));
   };
 
-  // Active bounding box for synchronized audit
-  const activeBox =
-    auditMode && selectedItem?.block_boxes && selectedItem.block_boxes.length > activeBlockIndex
-      ? selectedItem.block_boxes[activeBlockIndex]
-      : null;
+  const handleImageClick = (e: React.MouseEvent<HTMLImageElement>) => {
+    if (!selectedItem?.block_boxes || selectedItem.block_boxes.length === 0) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
+    const clickXNorm = (e.clientX - rect.left) / rect.width;
+    const clickYNorm = (e.clientY - rect.top) / rect.height;
+
+    const normX = Math.round(clickXNorm * 1000);
+    const normY = Math.round(clickYNorm * 1000);
+
+    let matchedBox: { index: number; dist: number } | null = null;
+
+    for (const box of selectedItem.block_boxes) {
+      if (normX >= box.xmin && normX <= box.xmax && normY >= box.ymin && normY <= box.ymax) {
+        matchedBox = { index: box.index, dist: 0 };
+        break;
+      }
+      const cx = (box.xmin + box.xmax) / 2;
+      const cy = (box.ymin + box.ymax) / 2;
+      const dist = Math.hypot(normX - cx, normY - cy);
+      if (!matchedBox || dist < matchedBox.dist) {
+        matchedBox = { index: box.index, dist };
+      }
+    }
+
+    if (matchedBox) {
+      setActiveBlockIndex(matchedBox.index);
+      setAuditMode(true);
+    }
+  };
 
   return (
     <div className="flex-1 flex flex-col h-full bg-desk-light dark:bg-desk-dark p-3 select-none relative overflow-hidden">
@@ -90,33 +117,59 @@ export const PreviewPanel: React.FC = () => {
                   </span>
                 </div>
               ) : previewUrl ? (
-                <img
-                  src={previewUrl}
-                  alt={selectedItem.file_name}
+                <div
+                  className="relative inline-block"
                   style={{
                     transform: `rotate(${rotation}deg)`,
                     transition: 'transform 250ms ease-out',
                   }}
-                  className={`max-h-[calc(100vh-10rem)] max-w-full rounded shadow-md object-${fitMode}`}
-                />
-              ) : null}
-
-              {/* Synchronized Audit Focus Guide Box */}
-              {activeBox && (
-                <div
-                  className="absolute pointer-events-none border-2 border-brand-light dark:border-brand-dark bg-brand-light/15 dark:bg-brand-dark/20 rounded transition-all duration-200 z-10"
-                  style={{
-                    top: `${activeBox.ymin / 10}%`,
-                    left: `${activeBox.xmin / 10}%`,
-                    width: `${(activeBox.xmax - activeBox.xmin) / 10}%`,
-                    height: `${(activeBox.ymax - activeBox.ymin) / 10}%`,
-                  }}
                 >
-                  <span className="absolute -top-5 left-0 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand-light dark:bg-brand-dark text-white uppercase tracking-wider">
-                    LINE {String(activeBlockIndex + 1).padStart(2, '0')}
-                  </span>
+                  <img
+                    ref={imgRef}
+                    src={previewUrl}
+                    alt={selectedItem.file_name}
+                    onClick={handleImageClick}
+                    className={`max-h-[calc(100vh-10rem)] max-w-full rounded shadow-md object-${fitMode} ${
+                      selectedItem?.block_boxes && selectedItem.block_boxes.length > 0
+                        ? 'cursor-crosshair'
+                        : ''
+                    }`}
+                  />
+
+                  {/* Synchronized Audit Interactive Hotspot Overlays */}
+                  {auditMode &&
+                    selectedItem?.block_boxes?.map((box) => {
+                      const isActive = activeBlockIndex === box.index;
+                      return (
+                        <div
+                          key={box.index}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveBlockIndex(box.index);
+                          }}
+                          className={`absolute rounded transition-all duration-150 cursor-pointer ${
+                            isActive
+                              ? 'border-2 border-brand-light dark:border-brand-dark bg-brand-light/20 dark:bg-brand-dark/25 z-20 shadow-sm'
+                              : 'border border-brand-light/30 dark:border-brand-dark/30 hover:border-brand-light dark:hover:border-brand-dark hover:bg-brand-light/10 dark:hover:bg-brand-dark/15 z-10'
+                          }`}
+                          style={{
+                            top: `${box.ymin / 10}%`,
+                            left: `${box.xmin / 10}%`,
+                            width: `${(box.xmax - box.xmin) / 10}%`,
+                            height: `${(box.ymax - box.ymin) / 10}%`,
+                          }}
+                          title={`Block ${box.index + 1} - Click to focus in text`}
+                        >
+                          {isActive && (
+                            <span className="absolute -top-5 left-0 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand-light dark:bg-brand-dark text-white uppercase tracking-wider shadow">
+                              BLOCK {String(box.index + 1).padStart(2, '0')}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                 </div>
-              )}
+              ) : null}
             </div>
 
             {/* Signature Motion: Precision Scan-Line Sweep */}

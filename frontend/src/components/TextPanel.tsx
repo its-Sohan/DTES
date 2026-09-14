@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   useAppStore,
   setOutputMode,
@@ -10,6 +10,13 @@ import {
 } from '../store/useAppStore';
 import * as api from '../../wailsjs/go/main/App';
 import { InvoiceValidationResult } from '../types';
+import {
+  WordToken,
+  tokenizeParagraph,
+  reconstructParagraph,
+  isSuspiciousWord,
+  findWordBoundaries,
+} from '../utils/ocrUtils';
 
 export const TextPanel: React.FC = () => {
   const {
@@ -26,8 +33,32 @@ export const TextPanel: React.FC = () => {
   const [exportOpen, setExportOpen] = useState<boolean>(false);
   const [mathResult, setMathResult] = useState<InvoiceValidationResult | null>(null);
 
+  // Word-level editing state in Audit Mode
+  const [editingTokenId, setEditingTokenId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState<string>('');
+
+  // Quick-Correct mode in Textarea Editor (1 click = select word, 2 clicks = drop caret)
+  const [quickCorrect, setQuickCorrect] = useState<boolean>(true);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const blockRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+  const lastClickRef = useRef<{ start: number; end: number; time: number }>({
+    start: -1,
+    end: -1,
+    time: 0,
+  });
+
   const selectedItem = queue.find((i) => i.id === selectedItemId);
   const extractedText = selectedItem?.extracted_text || '';
+
+  // Auto-scroll the active block into view when activeBlockIndex changes
+  useEffect(() => {
+    if (auditMode && blockRefs.current[activeBlockIndex]) {
+      blockRefs.current[activeBlockIndex]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+      });
+    }
+  }, [activeBlockIndex, auditMode]);
 
   const handleCopy = async () => {
     if (!extractedText) return;
@@ -107,6 +138,90 @@ export const TextPanel: React.FC = () => {
 
   const wordCount = extractedText.trim() ? extractedText.trim().split(/\s+/).length : 0;
   const charCount = extractedText.length;
+
+  const commitWordEdit = (
+    blockIdx: number,
+    tokenIdx: number,
+    newWord: string,
+    currentTokens: WordToken[]
+  ) => {
+    if (!selectedItem) return;
+    setEditingTokenId(null);
+
+    const trimmedWord = newWord.trim();
+    if (!trimmedWord && !currentTokens[tokenIdx].text) return;
+    if (trimmedWord === currentTokens[tokenIdx].text) return;
+
+    const updatedTokens = [...currentTokens];
+    updatedTokens[tokenIdx] = {
+      ...updatedTokens[tokenIdx],
+      text: trimmedWord || currentTokens[tokenIdx].text,
+      isSuspicious: isSuspiciousWord(trimmedWord),
+    };
+
+    const newParaText = reconstructParagraph(updatedTokens);
+    const updatedParagraphs = [...paragraphs];
+    updatedParagraphs[blockIdx] = newParaText;
+
+    const fullText = updatedParagraphs.join('\n\n');
+    updateItem(selectedItem.id, { extracted_text: fullText });
+  };
+
+  const jumpToToken = (
+    blockIdx: number,
+    targetTokenIdx: number,
+    allParagraphs: string[]
+  ) => {
+    if (blockIdx < 0 || blockIdx >= allParagraphs.length) return;
+    const tokens = tokenizeParagraph(allParagraphs[blockIdx], blockIdx);
+
+    if (targetTokenIdx >= 0 && targetTokenIdx < tokens.length) {
+      setEditingTokenId(tokens[targetTokenIdx].id);
+      setEditingValue(tokens[targetTokenIdx].text);
+    } else if (targetTokenIdx >= tokens.length && blockIdx + 1 < allParagraphs.length) {
+      setActiveBlockIndex(blockIdx + 1);
+      const nextTokens = tokenizeParagraph(allParagraphs[blockIdx + 1], blockIdx + 1);
+      if (nextTokens.length > 0) {
+        setEditingTokenId(nextTokens[0].id);
+        setEditingValue(nextTokens[0].text);
+      }
+    } else if (targetTokenIdx < 0 && blockIdx - 1 >= 0) {
+      setActiveBlockIndex(blockIdx - 1);
+      const prevTokens = tokenizeParagraph(allParagraphs[blockIdx - 1], blockIdx - 1);
+      if (prevTokens.length > 0) {
+        const lastIdx = prevTokens.length - 1;
+        setEditingTokenId(prevTokens[lastIdx].id);
+        setEditingValue(prevTokens[lastIdx].text);
+      }
+    }
+  };
+
+  const handleTextareaClick = () => {
+    if (!quickCorrect || !textareaRef.current) return;
+    const textarea = textareaRef.current;
+    const clickPos = textarea.selectionStart;
+
+    const { start, end } = findWordBoundaries(extractedText, clickPos);
+    if (start >= end) return;
+
+    const now = Date.now();
+    const last = lastClickRef.current;
+
+    // If clicked on the already selected word range within 1.5s,
+    // let standard caret drop happen (2nd click drops cursor)
+    if (last.start === start && last.end === end && now - last.time < 1500) {
+      lastClickRef.current = { start: -1, end: -1, time: 0 };
+      return;
+    }
+
+    // 1st click: select the full word
+    lastClickRef.current = { start, end, time: now };
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.setSelectionRange(start, end);
+      }
+    }, 10);
+  };
 
   return (
     <div className="w-[520px] flex flex-col h-full bg-surface-light dark:bg-surface-dark border-l border-hairline-light dark:border-hairline-dark select-none">
@@ -254,6 +369,21 @@ export const TextPanel: React.FC = () => {
         <span className="uppercase text-[9px] mr-1">Tools:</span>
         <div className="flex items-center space-x-1.5">
           <button
+            onClick={() => setQuickCorrect(!quickCorrect)}
+            title={
+              quickCorrect
+                ? 'Quick-Correct ON: Single click selects full word for fast replacement. 2nd click drops caret.'
+                : 'Quick-Correct OFF: Standard cursor placement.'
+            }
+            className={`px-1.5 py-0.5 rounded border transition-colors flex items-center space-x-1 ${
+              quickCorrect
+                ? 'border-brand-light/50 dark:border-brand-dark/50 bg-brand-light/10 dark:bg-brand-dark/15 text-brand-light dark:text-brand-dark font-semibold'
+                : 'border-hairline-light/50 dark:border-hairline-dark/50 text-ink-secondaryLight dark:text-ink-secondaryDark hover:text-ink-primaryLight dark:hover:text-ink-primaryDark'
+            }`}
+          >
+            <span>⚡ Quick-Correct</span>
+          </button>
+          <button
             onClick={() => handleTransform('digits_to_english')}
             title="Convert Bengali numerals (০-৯) to standard 0-9"
             className="hover:text-brand-light dark:hover:text-brand-dark px-1.5 py-0.5 rounded border border-hairline-light/50 dark:border-hairline-dark/50"
@@ -326,26 +456,42 @@ export const TextPanel: React.FC = () => {
             ) : (
               paragraphs.map((para, idx) => {
                 const isActive = activeBlockIndex === idx;
+                const tokens = tokenizeParagraph(para, idx);
+                const suspiciousCount = tokens.filter((t) => t.isSuspicious).length;
+
                 return (
                   <div
                     key={idx}
+                    ref={(el) => {
+                      blockRefs.current[idx] = el;
+                    }}
                     onClick={() => setActiveBlockIndex(idx)}
                     className={`p-3 rounded-panel border transition-all cursor-pointer ${
                       isActive
-                        ? 'border-brand-light dark:border-brand-dark bg-inset-light dark:bg-inset-dark ring-1 ring-brand-light/30'
+                        ? 'border-brand-light dark:border-brand-dark bg-inset-light dark:bg-inset-dark ring-1 ring-brand-light/30 shadow-sm'
                         : 'border-hairline-light dark:border-hairline-dark hover:border-brand-light/40 bg-surface-light dark:bg-surface-dark'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span
-                        className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                          isActive
-                            ? 'bg-brand-light dark:bg-brand-dark text-white'
-                            : 'bg-inset-light dark:bg-inset-dark text-ink-secondaryLight dark:text-ink-secondaryDark'
-                        }`}
-                      >
-                        BLOCK {String(idx + 1).padStart(2, '0')}
-                      </span>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-2">
+                        <span
+                          className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            isActive
+                              ? 'bg-brand-light dark:bg-brand-dark text-white'
+                              : 'bg-inset-light dark:bg-inset-dark text-ink-secondaryLight dark:text-ink-secondaryDark'
+                          }`}
+                        >
+                          BLOCK {String(idx + 1).padStart(2, '0')}
+                        </span>
+                        {suspiciousCount > 0 && (
+                          <span
+                            title="Words that may contain OCR recognition errors"
+                            className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 dark:bg-amber-400/20 text-amber-700 dark:text-amber-300 font-semibold"
+                          >
+                            ⚠ {suspiciousCount} suspicious
+                          </span>
+                        )}
+                      </div>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -356,8 +502,82 @@ export const TextPanel: React.FC = () => {
                         Copy block
                       </button>
                     </div>
+
+                    {/* Interactive Word Tokens */}
                     <p className="text-xs font-sans whitespace-pre-wrap leading-relaxed text-ink-primaryLight dark:text-ink-primaryDark">
-                      {para}
+                      {tokens.map((token, tokenIdx) => {
+                        const isEditing = editingTokenId === token.id;
+
+                        if (isEditing) {
+                          return (
+                            <React.Fragment key={token.id}>
+                              <input
+                                type="text"
+                                autoFocus
+                                value={editingValue}
+                                ref={(input) => {
+                                  if (input) {
+                                    // 1st press selects whole word; 2nd press allows cursor caret to drop
+                                    input.select();
+                                  }
+                                }}
+                                onChange={(e) => setEditingValue(e.target.value)}
+                                onBlur={() => {
+                                  commitWordEdit(idx, tokenIdx, editingValue, tokens);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    commitWordEdit(idx, tokenIdx, editingValue, tokens);
+                                  } else if (e.key === 'Tab') {
+                                    e.preventDefault();
+                                    commitWordEdit(idx, tokenIdx, editingValue, tokens);
+                                    if (e.shiftKey) {
+                                      jumpToToken(idx, tokenIdx - 1, paragraphs);
+                                    } else {
+                                      jumpToToken(idx, tokenIdx + 1, paragraphs);
+                                    }
+                                  } else if (e.key === 'Escape') {
+                                    e.preventDefault();
+                                    setEditingTokenId(null);
+                                  }
+                                }}
+                                className="font-mono text-xs px-1 py-0.5 rounded border border-brand-light dark:border-brand-dark bg-surface-light dark:bg-surface-dark text-ink-primaryLight dark:text-ink-primaryDark outline-none ring-1 ring-brand-light/50 shadow-sm"
+                                style={{
+                                  width: `${Math.max(3, editingValue.length + 1)}ch`,
+                                }}
+                              />
+                              <span className="whitespace-pre">{token.trailingSpace}</span>
+                            </React.Fragment>
+                          );
+                        }
+
+                        return (
+                          <React.Fragment key={token.id}>
+                            <span
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveBlockIndex(idx);
+                                setEditingTokenId(token.id);
+                                setEditingValue(token.text);
+                              }}
+                              title={
+                                token.isSuspicious
+                                  ? `Suspicious OCR token "${token.text}" - Click to replace`
+                                  : `Click to replace "${token.text}"`
+                              }
+                              className={`inline-block px-0.5 rounded cursor-pointer transition-colors ${
+                                token.isSuspicious
+                                  ? 'border-b-2 border-dashed border-amber-500/80 bg-amber-500/15 dark:bg-amber-400/20 text-amber-900 dark:text-amber-200 font-semibold'
+                                  : 'hover:bg-brand-light/10 dark:hover:bg-brand-dark/20 hover:text-brand-light dark:hover:text-brand-dark'
+                              }`}
+                            >
+                              {token.text}
+                            </span>
+                            <span className="whitespace-pre">{token.trailingSpace}</span>
+                          </React.Fragment>
+                        );
+                      })}
                     </p>
                   </div>
                 );
@@ -367,7 +587,9 @@ export const TextPanel: React.FC = () => {
         ) : (
           /* Editor Mode */
           <textarea
+            ref={textareaRef}
             value={extractedText}
+            onClick={handleTextareaClick}
             onChange={(e) => updateItem(selectedItem.id, { extracted_text: e.target.value })}
             placeholder="Extracted text will appear here. You can freely edit or format it."
             className="w-full h-full resize-none bg-transparent font-mono text-xs leading-relaxed text-ink-primaryLight dark:text-ink-primaryDark outline-none"
