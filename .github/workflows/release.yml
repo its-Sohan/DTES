@@ -71,6 +71,13 @@ jobs:
           wails build -clean -platform ${{ matrix.platform }}
           cp build/bin/itt-ocr build/bin/${{ matrix.artifact }}
 
+      - name: Install NSIS
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install nsis -y
+          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - name: Build Windows executable and installer
         if: runner.os == 'Windows'
         shell: pwsh
@@ -81,6 +88,10 @@ jobs:
           }
           Copy-Item build/bin/itt-ocr.exe build/bin/${{ matrix.artifact }}.exe
           $installer = Get-ChildItem build/bin/*-installer.exe | Select-Object -First 1
+          if (-not $installer) {
+            Write-Error "Installer executable was not created"
+            exit 1
+          }
           Copy-Item $installer.FullName build/bin/${{ matrix.artifact }}-installer.exe
 
       - name: Upload build artifacts

@@ -9,5 +9,12 @@
   "author": {
     "name": "its-Sohan",
     "email": "stathammurphy141@gmail.com"
+  },
+  "info": {
+    "companyName": "its-Sohan",
+    "productName": "ITT OCR",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright © 2026 its-Sohan",
+    "comments": "Image-to-Text OCR Desktop Application"
   }
 }
