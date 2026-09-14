@@ -12,6 +12,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -193,6 +197,20 @@ var archAliases = map[string][]string{
 // matches the OS, so a user on arm64 is not handed an amd64 build. When nothing
 // matches, callers fall back to the release page rather than guessing.
 func selectAsset(assets []Asset, goos, goarch string) (Asset, bool) {
+	// For Windows, prefer an installer package over standalone executable if both exist.
+	if goos == "windows" {
+		for _, a := range assets {
+			name := strings.ToLower(a.Name)
+			if strings.HasSuffix(name, ".exe") && (strings.Contains(name, "installer") || strings.Contains(name, "setup")) {
+				for _, alias := range archAliases[goarch] {
+					if strings.Contains(name, alias) {
+						return a, true
+					}
+				}
+			}
+		}
+	}
+
 	exts, ok := platformExtensions[goos]
 	if !ok {
 		return Asset{}, false
@@ -203,7 +221,7 @@ func selectAsset(assets []Asset, goos, goarch string) (Asset, bool) {
 	for _, ext := range exts {
 		for i := range assets {
 			name := strings.ToLower(assets[i].Name)
-			if !strings.HasSuffix(name, ext) {
+			if ext != "" && !strings.HasSuffix(name, ext) {
 				continue
 			}
 			for _, alias := range archAliases[goarch] {
@@ -217,8 +235,130 @@ func selectAsset(assets []Asset, goos, goarch string) (Asset, bool) {
 		}
 	}
 
+	// For Linux, also check bare binaries without standard extension
+	if goos == "linux" {
+		for _, a := range assets {
+			name := strings.ToLower(a.Name)
+			if !strings.Contains(name, ".") || strings.HasSuffix(name, ".zip") {
+				for _, alias := range archAliases[goarch] {
+					if strings.Contains(name, alias) {
+						return a, true
+					}
+				}
+			}
+		}
+	}
+
 	if osOnly != nil {
 		return *osOnly, true
 	}
 	return Asset{}, false
+}
+
+// DownloadAndInstall streams the update package from downloadURL to a secure
+// temporary file, emitting progress (0-100) via onProgress, and launches the installer.
+func DownloadAndInstall(ctx context.Context, downloadURL string, onProgress func(int)) error {
+	u, err := url.Parse(downloadURL)
+	if err != nil {
+		return fmt.Errorf("invalid download url: %w", err)
+	}
+
+	// Security guard: Only allow downloads from official github endpoints
+	host := strings.ToLower(u.Host)
+	if !strings.HasSuffix(host, "github.com") &&
+		!strings.HasSuffix(host, "githubusercontent.com") {
+		return fmt.Errorf("untrusted download source %q (must be github.com)", u.Host)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
+	if err != nil {
+		return fmt.Errorf("prepare download request: %w", err)
+	}
+	req.Header.Set("User-Agent", version.UserAgent())
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("download update: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download failed with HTTP %d", resp.StatusCode)
+	}
+
+	filename := filepath.Base(u.Path)
+	if filename == "" || filename == "/" || filename == "." {
+		filename = "itt-ocr-update.exe"
+	}
+
+	tempDir := os.TempDir()
+	tempPath := filepath.Join(tempDir, fmt.Sprintf("itt-ocr-update-%d-%s", time.Now().Unix(), filename))
+	out, err := os.Create(tempPath)
+	if err != nil {
+		return fmt.Errorf("create temporary update file: %w", err)
+	}
+
+	totalSize := resp.ContentLength
+	var downloaded int64
+	buf := make([]byte, 32*1024)
+	lastReport := time.Now()
+
+	for {
+		n, rErr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, wErr := out.Write(buf[:n]); wErr != nil {
+				_ = out.Close()
+				_ = os.Remove(tempPath)
+				return fmt.Errorf("write update file: %w", wErr)
+			}
+			downloaded += int64(n)
+			if totalSize > 0 && onProgress != nil {
+				if time.Since(lastReport) > 100*time.Millisecond {
+					pct := int(float64(downloaded) / float64(totalSize) * 100)
+					if pct > 100 {
+						pct = 100
+					}
+					onProgress(pct)
+					lastReport = time.Now()
+				}
+			}
+		}
+		if rErr == io.EOF {
+			break
+		}
+		if rErr != nil {
+			_ = out.Close()
+			_ = os.Remove(tempPath)
+			return fmt.Errorf("read update stream: %w", rErr)
+		}
+	}
+
+	if err := out.Close(); err != nil {
+		_ = os.Remove(tempPath)
+		return fmt.Errorf("close downloaded update file: %w", err)
+	}
+
+	if onProgress != nil {
+		onProgress(100)
+	}
+
+	// Make executable on unix platforms
+	if runtime.GOOS != "windows" {
+		_ = os.Chmod(tempPath, 0755)
+	}
+
+	// Launch installer / executable detached
+	if runtime.GOOS == "windows" {
+		cmd := exec.Command(tempPath)
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("launch installer: %w", err)
+		}
+	} else if runtime.GOOS == "darwin" {
+		_ = exec.Command("open", tempPath).Start()
+	} else {
+		// Linux: open containing directory
+		_ = exec.Command("xdg-open", filepath.Dir(tempPath)).Start()
+	}
+
+	return nil
 }

@@ -265,6 +265,23 @@ func (a *App) CheckForUpdates() (updater.CheckResult, error) {
 	return updater.Check(a.context())
 }
 
+// InstallUpdate downloads the update package and launches the installer/executable.
+func (a *App) InstallUpdate(downloadURL string) error {
+	return updater.DownloadAndInstall(a.context(), downloadURL, func(percent int) {
+		wailsRuntime.EventsEmit(a.ctx, "update_progress", percent)
+	})
+}
+
+// OpenBrowserURL opens an external link in the user's default browser.
+func (a *App) OpenBrowserURL(targetURL string) {
+	wailsRuntime.BrowserOpenURL(a.ctx, targetURL)
+}
+
+// QuitApplication terminates the app so that an installer can update files.
+func (a *App) QuitApplication() {
+	wailsRuntime.Quit(a.ctx)
+}
+
 // GenerateBugReport generates a redacted diagnostic report
 func (a *App) GenerateBugReport(description string, steps string) (string, error) {
 	return bugreport.Generate(description, steps)

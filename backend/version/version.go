@@ -18,7 +18,7 @@ import (
 // Values injected via -ldflags. The defaults describe a local dev build.
 var (
 	// Version is the semantic version, without a leading "v".
-	Version = "1.0.0"
+	Version = "0.1.3"
 	// Commit is the short git SHA the binary was built from.
 	Commit = "unknown"
 	// BuildDate is an RFC 3339 timestamp of the build.

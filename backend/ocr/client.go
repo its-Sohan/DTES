@@ -272,7 +272,7 @@ func complete(ctx context.Context, ep Endpoint, systemPrompt, userPrompt, imageD
 	}
 	// OpenRouter attributes traffic using these headers.
 	if strings.Contains(strings.ToLower(ep.base), "openrouter") {
-		req.Header.Set("HTTP-Referer", "https://github.com/its-Sohan/itt-ocr")
+		req.Header.Set("HTTP-Referer", "https://github.com/its-Sohan/DTES")
 		req.Header.Set("X-Title", version.AppName)
 	}
 

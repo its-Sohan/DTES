@@ -6,9 +6,6 @@ export const SettingsModal: React.FC = () => {
   const { activeModal, config } = useAppStore();
   const [formData, setFormData] = useState({ ...config });
   const [showKey, setShowKey] = useState(false);
-  const [bugDesc, setBugDesc] = useState('');
-  const [bugSteps, setBugSteps] = useState('');
-  const [bugReportPath, setBugReportPath] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   if (activeModal !== 'settings') return null;
@@ -26,19 +23,6 @@ export const SettingsModal: React.FC = () => {
     }
   };
 
-  const handleGenerateBugReport = async () => {
-    if (!bugDesc.trim()) {
-      alert('Please enter a brief description of the issue');
-      return;
-    }
-    try {
-      const path = await api.GenerateBugReport(bugDesc, bugSteps);
-      setBugReportPath(path);
-    } catch (err: any) {
-      alert(err?.message || 'Failed to generate diagnostic report');
-    }
-  };
-
   return (
     <div
       className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 select-none"
@@ -49,15 +33,14 @@ export const SettingsModal: React.FC = () => {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-4 border-b border-hairline-light dark:border-hairline-dark flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <svg className="w-5 h-5 text-brand-light dark:text-brand-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            <h2 className="text-sm font-semibold text-ink-primaryLight dark:text-ink-primaryDark">Settings & Credentials</h2>
-          </div>
-          <button onClick={() => setModal('none')} className="text-ink-secondaryLight dark:text-ink-secondaryDark hover:opacity-75">
+        <div className="relative p-4 border-b border-hairline-light dark:border-hairline-dark flex items-center justify-center">
+          <h2 className="text-sm font-semibold text-ink-primaryLight dark:text-ink-primaryDark text-center">
+            Settings
+          </h2>
+          <button
+            onClick={() => setModal('none')}
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-ink-secondaryLight dark:text-ink-secondaryDark hover:opacity-75"
+          >
             ✕
           </button>
         </div>
@@ -67,7 +50,7 @@ export const SettingsModal: React.FC = () => {
           {/* API Key */}
           <div>
             <label className="block font-medium text-ink-primaryLight dark:text-ink-primaryDark mb-1">
-              API Key (OpenAI / Gemini / OpenRouter)
+              Application Key
             </label>
             <div className="relative">
               <input
@@ -85,40 +68,6 @@ export const SettingsModal: React.FC = () => {
                 {showKey ? 'Hide' : 'Show'}
               </button>
             </div>
-            <p className="text-[10px] text-ink-secondaryLight dark:text-ink-secondaryDark mt-0.5">
-              Leave blank only if using a local vision server (Ollama, LM Studio).
-            </p>
-          </div>
-
-          {/* Endpoint Base URL */}
-          <div>
-            <label className="block font-medium text-ink-primaryLight dark:text-ink-primaryDark mb-1">
-              Endpoint Base URL
-            </label>
-            <input
-              type="text"
-              value={formData.base_url}
-              onChange={(e) => setFormData({ ...formData, base_url: e.target.value })}
-              placeholder="https://api.openai.com/v1"
-              className="w-full font-mono text-xs px-3 py-1.5 rounded bg-inset-light dark:bg-inset-dark border border-hairline-light dark:border-hairline-dark text-ink-primaryLight dark:text-ink-primaryDark outline-none"
-            />
-            <p className="text-[10px] text-ink-secondaryLight dark:text-ink-secondaryDark mt-0.5">
-              Google Gemini: https://generativelanguage.googleapis.com/v1beta/openai
-            </p>
-          </div>
-
-          {/* Fallback Model Name */}
-          <div>
-            <label className="block font-medium text-ink-primaryLight dark:text-ink-primaryDark mb-1">
-              Default Model Name
-            </label>
-            <input
-              type="text"
-              value={formData.model_name}
-              onChange={(e) => setFormData({ ...formData, model_name: e.target.value })}
-              placeholder="gpt-4o-mini"
-              className="w-full font-mono text-xs px-3 py-1.5 rounded bg-inset-light dark:bg-inset-dark border border-hairline-light dark:border-hairline-dark text-ink-primaryLight dark:text-ink-primaryDark outline-none"
-            />
           </div>
 
           {/* Options Grid */}
@@ -179,35 +128,6 @@ export const SettingsModal: React.FC = () => {
                 Check for software updates on startup
               </span>
             </label>
-          </div>
-
-          {/* Diagnostic Bug Report Section */}
-          <div className="pt-3 border-t border-hairline-light dark:border-hairline-dark space-y-2">
-            <h3 className="font-semibold text-xs text-ink-primaryLight dark:text-ink-primaryDark">
-              Diagnostic & Bug Reporting
-            </h3>
-            <p className="text-[10px] text-ink-secondaryLight dark:text-ink-secondaryDark">
-              Generates a redacted, offline diagnostic report on your disk. API keys and document texts are completely excluded.
-            </p>
-            <input
-              type="text"
-              value={bugDesc}
-              onChange={(e) => setBugDesc(e.target.value)}
-              placeholder="Brief issue description..."
-              className="w-full text-xs px-2.5 py-1 rounded bg-inset-light dark:bg-inset-dark border border-hairline-light dark:border-hairline-dark text-ink-primaryLight dark:text-ink-primaryDark outline-none"
-            />
-            <button
-              type="button"
-              onClick={handleGenerateBugReport}
-              className="text-xs px-2.5 py-1 rounded bg-inset-light dark:bg-inset-dark border border-hairline-light dark:border-hairline-dark hover:border-brand-light text-ink-primaryLight dark:text-ink-primaryDark"
-            >
-              Generate Diagnostic Bundle
-            </button>
-            {bugReportPath && (
-              <p className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 truncate">
-                Saved: {bugReportPath}
-              </p>
-            )}
           </div>
         </div>
 

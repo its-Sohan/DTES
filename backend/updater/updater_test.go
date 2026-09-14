@@ -1,6 +1,9 @@
 package updater
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestSelectAssetPrefersMatchingArch(t *testing.T) {
 	assets := []Asset{
@@ -113,7 +116,7 @@ func TestSelectAssetPrefersRealAssetOverSourceArchive(t *testing.T) {
 
 func TestRepoPattern(t *testing.T) {
 	valid := []string{
-		"its-Sohan/itt-ocr-release",
+		"its-Sohan/DTES",
 		"owner/repo",
 		"Owner_1/repo.name",
 		"a/b",
@@ -139,5 +142,23 @@ func TestRepoPattern(t *testing.T) {
 		if repoPattern.MatchString(r) {
 			t.Errorf("repoPattern accepted invalid repo %q", r)
 		}
+	}
+}
+
+func TestSelectAssetPrefersWindowsInstaller(t *testing.T) {
+	assets := []Asset{
+		{Name: "itt-ocr-windows-amd64.exe", DownloadURL: "exe-url"},
+		{Name: "itt-ocr-windows-amd64-installer.exe", DownloadURL: "installer-url"},
+	}
+	got, ok := selectAsset(assets, "windows", "amd64")
+	if !ok || got.DownloadURL != "installer-url" {
+		t.Errorf("got %+v, want installer-url", got)
+	}
+}
+
+func TestDownloadAndInstallRejectsUntrustedHost(t *testing.T) {
+	err := DownloadAndInstall(t.Context(), "https://evil.com/malware.exe", nil)
+	if err == nil || !strings.Contains(err.Error(), "untrusted download source") {
+		t.Errorf("expected untrusted download source error, got: %v", err)
 	}
 }

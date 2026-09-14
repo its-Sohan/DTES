@@ -66,12 +66,12 @@ func DefaultConfig() types.Config {
 	return types.Config{
 		SessionAccount:      "default_user",
 		APIKey:              "",
-		BaseURL:             "https://api.openai.com/v1",
-		ModelName:           "gpt-4o-mini",
+		BaseURL:             "https://ai.rupic.studio/v1",
+		ModelName:           "gemini-3.5-flash-lite",
 		AutoExtract:         true,
 		DefaultOutputMode:   string(types.OutputModeDocument),
 		Quality:             string(types.QualityStandard),
-		ReleasesRepo:        "its-Sohan/itt-ocr-release",
+		ReleasesRepo:        "its-Sohan/DTES",
 		CheckUpdatesStartup: true,
 		UsageStats:          types.UsageStats{},
 	}
@@ -96,7 +96,7 @@ func withDefaults(cfg types.Config) types.Config {
 	if !types.IsValidQuality(cfg.Quality) {
 		cfg.Quality = def.Quality
 	}
-	if cfg.ReleasesRepo == "" {
+	if cfg.ReleasesRepo == "" || cfg.ReleasesRepo == "its-Sohan/itt-ocr-release" || cfg.ReleasesRepo == "its-Sohan/itt-ocr-releases" {
 		cfg.ReleasesRepo = def.ReleasesRepo
 	}
 	return cfg

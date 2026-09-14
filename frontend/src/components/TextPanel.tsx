@@ -9,7 +9,6 @@ import {
   setActiveBlockIndex,
 } from '../store/useAppStore';
 import * as api from '../../wailsjs/go/main/App';
-import { InvoiceValidationResult } from '../types';
 import {
   WordToken,
   tokenizeParagraph,
@@ -31,7 +30,7 @@ export const TextPanel: React.FC = () => {
 
   const [copied, setCopied] = useState<boolean>(false);
   const [exportOpen, setExportOpen] = useState<boolean>(false);
-  const [mathResult, setMathResult] = useState<InvoiceValidationResult | null>(null);
+  const [transformOpen, setTransformOpen] = useState<boolean>(false);
 
   // Word-level editing state in Audit Mode
   const [editingTokenId, setEditingTokenId] = useState<string | null>(null);
@@ -78,16 +77,6 @@ export const TextPanel: React.FC = () => {
       updateItem(selectedItem.id, { extracted_text: transformed });
     } catch (err) {
       console.error('Transform failed:', err);
-    }
-  };
-
-  const handleCheckMath = async () => {
-    if (!extractedText) return;
-    try {
-      const res = await api.CheckInvoiceMath(extractedText);
-      setMathResult(res);
-    } catch (err) {
-      console.error('Invoice math check failed:', err);
     }
   };
 
@@ -227,8 +216,8 @@ export const TextPanel: React.FC = () => {
     <div className="w-[520px] flex flex-col h-full bg-surface-light dark:bg-surface-dark border-l border-hairline-light dark:border-hairline-dark select-none">
       {/* Top Controls: Modes & Primary Extract */}
       <div className="p-3 border-b border-hairline-light dark:border-hairline-dark space-y-2.5">
-        {/* Mode Selector Tabs */}
-        <div className="flex items-center space-x-1 p-0.5 rounded-panel bg-inset-light dark:bg-inset-dark border border-hairline-light dark:border-hairline-dark text-xs">
+        {/* Mode Selector Buttons */}
+        <div className="flex items-center p-1 rounded-md bg-inset-light dark:bg-inset-dark border border-hairline-light dark:border-hairline-dark text-xs gap-1">
           {[
             { id: 'document', label: 'Document' },
             { id: 'spreadsheet', label: 'Spreadsheet' },
@@ -240,11 +229,10 @@ export const TextPanel: React.FC = () => {
               <button
                 key={m.id}
                 onClick={() => setOutputMode(m.id as any)}
-                className={`flex-1 py-1 rounded-[4px] font-medium transition-all ${
-                  isActive
-                    ? 'bg-surface-light dark:bg-surface-dark text-brand-light dark:text-brand-dark shadow-sm'
-                    : 'text-ink-secondaryLight dark:text-ink-secondaryDark hover:text-ink-primaryLight dark:hover:text-ink-primaryDark'
-                }`}
+                className={`flex-1 py-1 px-2.5 rounded text-xs font-medium transition-all duration-150 ${isActive
+                  ? 'bg-brand-light dark:bg-brand-dark text-white shadow-sm font-semibold'
+                  : 'text-ink-secondaryLight dark:text-ink-secondaryDark hover:text-ink-primaryLight dark:hover:text-ink-primaryDark hover:bg-surface-light/60 dark:hover:bg-surface-dark/60'
+                  }`}
               >
                 {m.label}
               </button>
@@ -254,17 +242,48 @@ export const TextPanel: React.FC = () => {
 
         {/* Quality & Primary Action */}
         <div className="flex items-center justify-between space-x-2">
-          {/* Quality Select */}
-          <div className="flex items-center space-x-1.5 text-xs text-ink-secondaryLight dark:text-ink-secondaryDark">
-            <span className="font-mono text-[10px] uppercase">Quality:</span>
-            <select
-              value={activeQuality}
-              onChange={(e) => setQuality(e.target.value as any)}
-              className="text-xs bg-inset-light dark:bg-inset-dark border border-hairline-light dark:border-hairline-dark rounded px-2 py-1 text-ink-primaryLight dark:text-ink-primaryDark outline-none cursor-pointer"
-            >
-              <option value="standard">Standard (Fast)</option>
-              <option value="high">High Precision (Gemini 3.7)</option>
-            </select>
+          {/* Quality Pure Typography & Color Switch */}
+          <div className="flex items-center space-x-3 text-xs">
+            <span className="font-mono text-[10px] text-ink-secondaryLight/50 dark:text-ink-secondaryDark/50 uppercase">
+              Quality
+            </span>
+            <div className="flex items-center space-x-2.5">
+              <button
+                type="button"
+                onClick={() => setQuality('standard')}
+                className={`flex items-center space-x-1.5 transition-all ${
+                  activeQuality === 'standard'
+                    ? 'text-ink-primaryLight dark:text-ink-primaryDark font-semibold'
+                    : 'text-ink-secondaryLight/50 dark:text-ink-secondaryDark/50 hover:text-ink-secondaryLight dark:hover:text-ink-secondaryDark'
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full transition-all ${
+                    activeQuality === 'standard' ? 'bg-brand-light dark:bg-brand-dark scale-100' : 'bg-transparent scale-0'
+                  }`}
+                />
+                <span>Standard</span>
+              </button>
+
+              <span className="text-ink-secondaryLight/20 dark:text-ink-secondaryDark/20 font-mono text-[10px]">/</span>
+
+              <button
+                type="button"
+                onClick={() => setQuality('high')}
+                className={`flex items-center space-x-1.5 transition-all ${
+                  activeQuality === 'high'
+                    ? 'text-brand-light dark:text-brand-dark font-semibold'
+                    : 'text-ink-secondaryLight/50 dark:text-ink-secondaryDark/50 hover:text-ink-secondaryLight dark:hover:text-ink-secondaryDark'
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full transition-all ${
+                    activeQuality === 'high' ? 'bg-brand-light dark:bg-brand-dark scale-100' : 'bg-transparent scale-0'
+                  }`}
+                />
+                <span>High Precision</span>
+              </button>
+            </div>
           </div>
 
           {/* Extract Button */}
@@ -299,21 +318,19 @@ export const TextPanel: React.FC = () => {
         <div className="flex items-center space-x-1">
           <button
             onClick={() => setAuditMode(false)}
-            className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
-              !auditMode
-                ? 'bg-surface-light dark:bg-surface-dark text-ink-primaryLight dark:text-ink-primaryDark border border-hairline-light dark:border-hairline-dark'
-                : 'text-ink-secondaryLight dark:text-ink-secondaryDark hover:text-ink-primaryLight dark:hover:text-ink-primaryDark'
-            }`}
+            className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${!auditMode
+              ? 'bg-surface-light dark:bg-surface-dark text-ink-primaryLight dark:text-ink-primaryDark border border-hairline-light dark:border-hairline-dark'
+              : 'text-ink-secondaryLight dark:text-ink-secondaryDark hover:text-ink-primaryLight dark:hover:text-ink-primaryDark'
+              }`}
           >
             Editor
           </button>
           <button
             onClick={() => setAuditMode(true)}
-            className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
-              auditMode
-                ? 'bg-surface-light dark:bg-surface-dark text-brand-light dark:text-brand-dark border border-brand-light/30 dark:border-brand-dark/30 font-semibold'
-                : 'text-ink-secondaryLight dark:text-ink-secondaryDark hover:text-ink-primaryLight dark:hover:text-ink-primaryDark'
-            }`}
+            className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${auditMode
+              ? 'bg-surface-light dark:bg-surface-dark text-brand-light dark:text-brand-dark border border-brand-light/30 dark:border-brand-dark/30 font-semibold'
+              : 'text-ink-secondaryLight dark:text-ink-secondaryDark hover:text-ink-primaryLight dark:hover:text-ink-primaryDark'
+              }`}
           >
             Audit Mode
           </button>
@@ -334,10 +351,74 @@ export const TextPanel: React.FC = () => {
             <span className="text-[11px]">{copied ? 'Copied!' : 'Copy'}</span>
           </button>
 
+          {/* Transform Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setTransformOpen(!transformOpen);
+                setExportOpen(false);
+              }}
+              disabled={!extractedText}
+              className="flex items-center space-x-1 px-2 py-1 rounded border border-hairline-light dark:border-hairline-dark bg-surface-light dark:bg-surface-dark text-ink-secondaryLight dark:text-ink-secondaryDark hover:text-ink-primaryLight dark:hover:text-ink-primaryDark disabled:opacity-40 transition-colors"
+            >
+              <span className="text-[11px]">Transform</span>
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {transformOpen && (
+              <div className="absolute right-0 top-full mt-1 w-44 rounded-panel border border-hairline-light dark:border-hairline-dark bg-surface-light dark:bg-surface-dark shadow-xl py-1 z-30 text-xs">
+                <button
+                  onClick={() => {
+                    handleTransform('digits_to_english');
+                    setTransformOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-ink-primaryLight dark:text-ink-primaryDark hover:bg-inset-light dark:hover:bg-inset-dark transition-colors flex items-center justify-between"
+                >
+                  <span>Numerals to English</span>
+                  <span className="font-mono text-[10px] text-ink-secondaryLight/60 dark:text-ink-secondaryDark/60">০→0</span>
+                </button>
+                <button
+                  onClick={() => {
+                    handleTransform('digits_to_bengali');
+                    setTransformOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-ink-primaryLight dark:text-ink-primaryDark hover:bg-inset-light dark:hover:bg-inset-dark transition-colors flex items-center justify-between"
+                >
+                  <span>Numerals to Bengali</span>
+                  <span className="font-mono text-[10px] text-ink-secondaryLight/60 dark:text-ink-secondaryDark/60">0→০</span>
+                </button>
+                <div className="my-1 border-t border-hairline-light dark:border-hairline-dark" />
+                <button
+                  onClick={() => {
+                    handleTransform('unwrap_lines');
+                    setTransformOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-ink-primaryLight dark:text-ink-primaryDark hover:bg-inset-light dark:hover:bg-inset-dark transition-colors"
+                >
+                  Unwrap Margins
+                </button>
+                <button
+                  onClick={() => {
+                    handleTransform('clean_tables');
+                    setTransformOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-ink-primaryLight dark:text-ink-primaryDark hover:bg-inset-light dark:hover:bg-inset-dark transition-colors"
+                >
+                  Align Markdown Tables
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Export Dropdown */}
           <div className="relative">
             <button
-              onClick={() => setExportOpen(!exportOpen)}
+              onClick={() => {
+                setExportOpen(!exportOpen);
+                setTransformOpen(false);
+              }}
               disabled={!extractedText}
               className="flex items-center space-x-1 px-2 py-1 rounded border border-hairline-light dark:border-hairline-dark bg-surface-light dark:bg-surface-dark text-ink-secondaryLight dark:text-ink-secondaryDark hover:text-ink-primaryLight dark:hover:text-ink-primaryDark disabled:opacity-40 transition-colors"
             >
@@ -411,36 +492,8 @@ export const TextPanel: React.FC = () => {
           >
             Align Table
           </button>
-          <button
-            onClick={handleCheckMath}
-            title="Deterministically audit invoice arithmetic"
-            className="hover:text-brand-light dark:hover:text-brand-dark px-1.5 py-0.5 rounded border border-brand-light/40 dark:border-brand-dark/40 text-brand-light dark:text-brand-dark font-semibold"
-          >
-            Audit Math
-          </button>
         </div>
       </div>
-
-      {/* Math Verification Alert Banner */}
-      {mathResult && (
-        <div
-          className={`px-3 py-2 border-b text-xs flex items-center justify-between ${
-            mathResult.matched
-              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400'
-              : 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-400'
-          }`}
-        >
-          <div className="flex items-center space-x-1.5">
-            <span className="font-bold">{mathResult.matched ? '✓ Math Verified:' : '⚠ Discrepancy Found:'}</span>
-            <span>
-              Total {mathResult.total.toFixed(2)} vs Calculated {mathResult.calculated.toFixed(2)}
-            </span>
-          </div>
-          <button onClick={() => setMathResult(null)} className="p-0.5 hover:opacity-75">
-            ✕
-          </button>
-        </div>
-      )}
 
       {/* Text Area / Paragraph Blocks View */}
       <div className="flex-1 overflow-y-auto p-4 select-text">
