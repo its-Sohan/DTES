@@ -112,22 +112,12 @@ func modeFor(mode string) Mode {
 	return modes[types.OutputModeDocument]
 }
 
-// highQualitySuffixes maps a configured model to its higher-accuracy sibling
-// for the "high" quality tier.
-//
-// This is intentionally conservative. An earlier version replaced the user's
-// configured model with a hardcoded name, which broke every non-Gemini provider
-// and pinned model versions that do not exist. Quality now only ever *upgrades*
-// a model we recognise, and otherwise leaves the user's choice untouched — the
-// provider, not this app, is the authority on which models exist.
+// highQualityUpgrades maps a configured Gemini model to its higher-accuracy
+// reasoning sibling for the "high" quality tier.
 var highQualityUpgrades = map[string]string{
-	"gpt-4o-mini":             "gpt-4o",
-	"gemini-1.5-flash":        "gemini-1.5-pro",
-	"gemini-2.0-flash":        "gemini-2.0-pro",
-	"gemini-2.0-flash-lite":   "gemini-2.0-flash",
-	"gemini-3.5-flash-lite":   "gemini-2.0-flash",
-	"gemini-1.5-flash-8b":     "gemini-1.5-flash",
-	"claude-3-haiku-20240307": "claude-3-5-sonnet-20241022",
+	"gemini-3.5-flash-lite": "gemini-3.7-flash",
+	"gemini-3.5-flash":      "gemini-3.7-flash",
+	"gemini-3.6-flash":      "gemini-3.7-flash",
 }
 
 // defaultDocumentOCRModel is the official Mistral OCR model identifier used
@@ -201,11 +191,15 @@ func extract(ctx context.Context, filePath, mode, quality string) (string, error
 		return "", err
 	}
 
-	m := modeFor(mode)
-	systemPrompt := fmt.Sprintf("%s\n\n[OUTPUT FORMAT DIRECTIVE: %s]\n%s",
-		basePrompt, strings.ToUpper(m.Label), m.SystemInstruction)
-
-	raw, err := complete(ctx, ep, systemPrompt, m.UserPrompt, dataURL)
+	var raw string
+	if types.Quality(quality) == types.QualityDocument {
+		raw, err = completeOCR(ctx, ep, dataURL, MimeTypeFor(filePath))
+	} else {
+		m := modeFor(mode)
+		systemPrompt := fmt.Sprintf("%s\n\n[OUTPUT FORMAT DIRECTIVE: %s]\n%s",
+			basePrompt, strings.ToUpper(m.Label), m.SystemInstruction)
+		raw, err = complete(ctx, ep, systemPrompt, m.UserPrompt, dataURL)
+	}
 	if err != nil {
 		return "", err
 	}

@@ -45,6 +45,7 @@ export namespace types {
 	    api_key: string;
 	    base_url: string;
 	    model_name: string;
+	    document_model_name?: string;
 	    auto_extract: boolean;
 	    default_output_mode: string;
 	    quality: string;
@@ -62,6 +63,7 @@ export namespace types {
 	        this.api_key = source["api_key"];
 	        this.base_url = source["base_url"];
 	        this.model_name = source["model_name"];
+	        this.document_model_name = source["document_model_name"];
 	        this.auto_extract = source["auto_extract"];
 	        this.default_output_mode = source["default_output_mode"];
 	        this.quality = source["quality"];

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -113,6 +114,29 @@ func TestResolveChatEndpointIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestResolveOCREndpoint(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"mistral base", "https://api.mistral.ai/v1", "https://api.mistral.ai/v1/ocr"},
+		{"trailing slash", "https://api.mistral.ai/v1/", "https://api.mistral.ai/v1/ocr"},
+		{"already ocr route", "https://api.mistral.ai/v1/ocr", "https://api.mistral.ai/v1/ocr"},
+		{"chat completions gets rewritten to ocr", "https://api.mistral.ai/v1/chat/completions", "https://api.mistral.ai/v1/ocr"},
+		{"bare host adds v1 ocr", "https://api.mistral.ai", "https://api.mistral.ai/v1/ocr"},
+		{"empty falls back to default ocr", "", "https://ai.rupic.studio/v1/ocr"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ResolveOCREndpoint(tc.input); got != tc.want {
+				t.Errorf("ResolveOCREndpoint(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
 // TestResolveModel pins the fix for the bug where the configured model was
 // discarded in favour of a hardcoded name that did not exist on any provider.
 func TestResolveModel(t *testing.T) {
@@ -122,18 +146,20 @@ func TestResolveModel(t *testing.T) {
 		quality    string
 		want       string
 	}{
-		{"standard keeps configured model", "gpt-4o-mini", "standard", "gpt-4o-mini"},
-		{"high upgrades a known model", "gpt-4o-mini", "high", "gpt-4o"},
+		{"standard keeps configured model", "gemini-3.5-flash", "standard", "gemini-3.5-flash"},
+		{"high upgrades 3.5 flash to 3.7 flash", "gemini-3.5-flash", "high", "gemini-3.7-flash"},
+		{"high upgrades 3.6 flash to 3.7 flash", "gemini-3.6-flash", "high", "gemini-3.7-flash"},
+		{"high upgrades 3.5 flash lite to 3.7 flash", "gemini-3.5-flash-lite", "high", "gemini-3.7-flash"},
 		{"empty falls back to a default", "", "standard", "gemini-3.5-flash-lite"},
-		{"whitespace is trimmed", "  gpt-4o  ", "standard", "gpt-4o"},
-		// The important cases: a custom or self-hosted model must survive.
+		{"whitespace is trimmed", "  gemini-3.5-flash  ", "standard", "gemini-3.5-flash"},
+		// The important cases: a custom or other vendor model must survive unchanged.
 		{"custom model kept on standard", "my-local-vision:7b", "standard", "my-local-vision:7b"},
 		{"custom model kept on high", "my-local-vision:7b", "high", "my-local-vision:7b"},
-		{"unknown vendor model kept on high", "qwen2.5-vl-72b", "high", "qwen2.5-vl-72b"},
-		{"unrecognised quality is treated as standard", "gpt-4o-mini", "ludicrous", "gpt-4o-mini"},
-		{"empty quality is treated as standard", "gpt-4o-mini", "", "gpt-4o-mini"},
-		{"document routes to mistral-ocr-latest", "gpt-4o-mini", "document", "mistral-ocr-latest"},
-		{"document routes gemini to mistral-ocr-latest", "gemini-3.5-flash-lite", "document", "mistral-ocr-latest"},
+		{"non-gemini vendor model kept on high", "gpt-4o-mini", "high", "gpt-4o-mini"},
+		{"unrecognised quality is treated as standard", "gemini-3.5-flash", "ludicrous", "gemini-3.5-flash"},
+		{"empty quality is treated as standard", "gemini-3.5-flash", "", "gemini-3.5-flash"},
+		{"document routes to mistral-ocr-latest", "gemini-3.5-flash", "document", "mistral-ocr-latest"},
+		{"document routes gemini lite to mistral-ocr-latest", "gemini-3.5-flash-lite", "document", "mistral-ocr-latest"},
 	}
 
 	for _, tc := range tests {
@@ -316,6 +342,68 @@ func TestExtractTextAgainstStubServer(t *testing.T) {
 	}
 	if stats.FailedRuns != 0 {
 		t.Errorf("FailedRuns = %d, want 0", stats.FailedRuns)
+	}
+}
+
+// TestExtractTextDocumentModeSendsNoTextPrompts verifies that Document mode routes
+// directly to the dedicated OCR endpoint without passing chat messages or text prompts.
+func TestExtractTextDocumentModeSendsNoTextPrompts(t *testing.T) {
+	var gotPath string
+	var gotModel string
+	var gotDocType string
+	var gotImageURL string
+	var rawBody map[string]any
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+
+		bodyBytes, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(bodyBytes, &rawBody)
+
+		var req ocrRequest
+		_ = json.Unmarshal(bodyBytes, &req)
+
+		gotModel = req.Model
+		gotDocType = req.Document.Type
+		gotImageURL = req.Document.ImageURL
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"pages":[{"index":0,"markdown":"Extracted Document Markdown Content"}]}`))
+	}))
+	defer srv.Close()
+
+	cfg := config.DefaultConfig()
+	cfg.APIKey = "sk-unit-test"
+	cfg.BaseURL = srv.URL + "/v1"
+	isolate(t, cfg)
+
+	text, err := ExtractText(context.Background(), tinyPNG(t), "document", "document")
+	if err != nil {
+		t.Fatalf("ExtractText: %v", err)
+	}
+
+	if text != "Extracted Document Markdown Content" {
+		t.Errorf("text = %q, want expected markdown", text)
+	}
+	if gotPath != "/v1/ocr" {
+		t.Errorf("request path = %q, want /v1/ocr", gotPath)
+	}
+	if gotModel != "mistral-ocr-latest" {
+		t.Errorf("model = %q, want mistral-ocr-latest", gotModel)
+	}
+	if gotDocType != "image_url" {
+		t.Errorf("document.type = %q, want image_url", gotDocType)
+	}
+	if !strings.HasPrefix(gotImageURL, "data:image/png;base64,") {
+		t.Errorf("document.image_url must be data URL, got %s", gotImageURL)
+	}
+
+	// Crucial: verify that NO chat messages or text prompt fields were sent!
+	if _, hasMessages := rawBody["messages"]; hasMessages {
+		t.Error("Document mode must NOT pass 'messages' field to OCR endpoint")
+	}
+	if _, hasPrompt := rawBody["prompt"]; hasPrompt {
+		t.Error("Document mode must NOT pass 'prompt' field to OCR endpoint")
 	}
 }
 

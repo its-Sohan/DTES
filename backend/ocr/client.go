@@ -142,6 +142,29 @@ func ResolveChatEndpoint(baseURL string) string {
 	return clean + "/chat/completions"
 }
 
+// ResolveOCREndpoint normalises a configured base URL into a full /ocr route
+// for dedicated OCR engines (such as Mistral OCR).
+func ResolveOCREndpoint(baseURL string) string {
+	clean := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if clean == "" {
+		clean = defaultBaseURL
+	}
+
+	if strings.HasSuffix(clean, "/ocr") {
+		return clean
+	}
+
+	if strings.HasSuffix(clean, "/chat/completions") {
+		clean = strings.TrimSuffix(clean, "/chat/completions")
+	}
+
+	if !strings.HasSuffix(clean, "/v1") && !strings.Contains(clean, "/v1") {
+		clean += "/v1"
+	}
+
+	return clean + "/ocr"
+}
+
 // isLocalEndpoint reports whether the URL points at the developer's machine, in
 // which case a missing API key is expected rather than a misconfiguration
 // (Ollama, LM Studio, llama.cpp and friends need no credentials).
@@ -173,8 +196,13 @@ func resolveEndpoint(cfg types.Config, quality string) (Endpoint, error) {
 		model = strings.TrimSpace(cfg.DocumentModelName)
 	}
 
+	targetURL := ResolveChatEndpoint(base)
+	if types.Quality(quality) == types.QualityDocument {
+		targetURL = ResolveOCREndpoint(base)
+	}
+
 	ep := Endpoint{
-		URL:    ResolveChatEndpoint(base),
+		URL:    targetURL,
 		APIKey: strings.TrimSpace(cfg.APIKey),
 		Model:  model,
 		base:   strings.TrimRight(base, "/"),
@@ -326,4 +354,116 @@ func complete(ctx context.Context, ep Endpoint, systemPrompt, userPrompt, imageD
 	}
 
 	return parsed.Choices[0].Message.Content, nil
+}
+
+// --- Wire format (Mistral OCR API endpoint) ---
+
+type ocrDocumentPayload struct {
+	Type        string `json:"type"`
+	ImageURL    string `json:"image_url,omitempty"`
+	DocumentURL string `json:"document_url,omitempty"`
+}
+
+type ocrRequest struct {
+	Model    string             `json:"model"`
+	Document ocrDocumentPayload `json:"document"`
+}
+
+type ocrResponse struct {
+	Pages []struct {
+		Index    int    `json:"index"`
+		Markdown string `json:"markdown"`
+	} `json:"pages"`
+	Error *struct {
+		Message string `json:"message"`
+		Type    string `json:"type"`
+		Code    any    `json:"code"`
+	} `json:"error,omitempty"`
+}
+
+// completeOCR performs a direct document OCR request without passing any chat
+// text messages or system instructions to the model.
+func completeOCR(ctx context.Context, ep Endpoint, dataURL, mimeType string) (string, error) {
+	docPayload := ocrDocumentPayload{}
+	if strings.HasPrefix(mimeType, "application/pdf") {
+		docPayload.Type = "document_url"
+		docPayload.DocumentURL = dataURL
+	} else {
+		docPayload.Type = "image_url"
+		docPayload.ImageURL = dataURL
+	}
+
+	body, err := json.Marshal(ocrRequest{
+		Model:    ep.Model,
+		Document: docPayload,
+	})
+	if err != nil {
+		return "", fmt.Errorf("encode OCR request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ep.URL, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("build OCR request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", version.UserAgent())
+	if ep.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+ep.APIKey)
+	}
+	if strings.Contains(strings.ToLower(ep.base), "openrouter") {
+		req.Header.Set("HTTP-Referer", "https://github.com/its-Sohan/DTES")
+		req.Header.Set("X-Title", version.AppName)
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return "", context.Canceled
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return "", fmt.Errorf("the OCR request to %s timed out after %s", ep.base, requestTimeout)
+		}
+		return "", fmt.Errorf("could not reach the OCR endpoint %s: %w", ep.base, err)
+	}
+	defer func() {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
+		_ = resp.Body.Close()
+	}()
+
+	payload, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read OCR response from %s: %w", ep.base, err)
+	}
+
+	var parsed ocrResponse
+	_ = json.Unmarshal(payload, &parsed)
+
+	if resp.StatusCode != http.StatusOK {
+		msg := strings.TrimSpace(string(payload))
+		if parsed.Error != nil && parsed.Error.Message != "" {
+			msg = parsed.Error.Message
+		}
+		if len(msg) > 500 {
+			msg = msg[:500] + "…"
+		}
+		return "", &APIError{StatusCode: resp.StatusCode, Endpoint: ep.URL, Message: msg}
+	}
+
+	if parsed.Error != nil && parsed.Error.Message != "" {
+		return "", fmt.Errorf("OCR API reported: %s", parsed.Error.Message)
+	}
+
+	var pageTexts []string
+	for _, page := range parsed.Pages {
+		if trimmed := strings.TrimSpace(page.Markdown); trimmed != "" {
+			pageTexts = append(pageTexts, trimmed)
+		}
+	}
+
+	if len(pageTexts) == 0 {
+		return "", fmt.Errorf("the OCR model returned no pages; the document may be blank or unreadable")
+	}
+
+	return strings.Join(pageTexts, "\n\n"), nil
 }
