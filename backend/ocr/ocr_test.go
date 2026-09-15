@@ -636,3 +636,105 @@ func TestModeForFallsBackToDocument(t *testing.T) {
 		t.Errorf("modeFor(spreadsheet).ID = %q", got.ID)
 	}
 }
+
+func TestResolveModelChain(t *testing.T) {
+	tests := []struct {
+		name       string
+		configured string
+		quality    string
+		want       []string
+	}{
+		{
+			name:       "gemini flash lite high cascade",
+			configured: "gemini-3.5-flash-lite",
+			quality:    "high",
+			want:       []string{"gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite"},
+		},
+		{
+			name:       "gemini 3.5 flash high cascade",
+			configured: "gemini-3.5-flash",
+			quality:    "high",
+			want:       []string{"gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite"},
+		},
+		{
+			name:       "standard returns single configured model",
+			configured: "gemini-3.5-flash-lite",
+			quality:    "standard",
+			want:       []string{"gemini-3.5-flash-lite"},
+		},
+		{
+			name:       "custom non-gemini model on high stays single",
+			configured: "custom-vision:latest",
+			quality:    "high",
+			want:       []string{"custom-vision:latest"},
+		},
+		{
+			name:       "document mode routes to mistral ocr latest",
+			configured: "gemini-3.5-flash",
+			quality:    "document",
+			want:       []string{"mistral-ocr-latest"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ResolveModelChain(tc.configured, tc.quality)
+			if len(got) != len(tc.want) {
+				t.Fatalf("ResolveModelChain(%q, %q) len = %d, want %d (%v vs %v)",
+					tc.configured, tc.quality, len(got), len(tc.want), got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("[%d] = %q, want %q", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestExtractTextFallbackOnQuotaExceeded(t *testing.T) {
+	var requestedModels []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req chatRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		requestedModels = append(requestedModels, req.Model)
+
+		if req.Model == "gemini-3.7-flash" {
+			// Simulate 429 Quota Exceeded on 3.7
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"error":{"message":"Quota exceeded for gemini-3.7-flash"}}`))
+			return
+		}
+
+		if req.Model == "gemini-3.6-flash" {
+			// Fallback succeeded!
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"Fallback success text"}}]}`))
+			return
+		}
+
+		http.Error(w, "unexpected model", http.StatusBadRequest)
+	}))
+	defer srv.Close()
+
+	cfg := config.DefaultConfig()
+	cfg.APIKey = "sk-fallback-test"
+	cfg.BaseURL = srv.URL + "/v1"
+	cfg.ModelName = "gemini-3.5-flash-lite"
+	isolate(t, cfg)
+
+	text, err := ExtractText(context.Background(), tinyPNG(t), "document", "high")
+	if err != nil {
+		t.Fatalf("ExtractText with fallback failed: %v", err)
+	}
+
+	if text != "Fallback success text" {
+		t.Errorf("got %q, want %q", text, "Fallback success text")
+	}
+
+	if len(requestedModels) != 2 || requestedModels[0] != "gemini-3.7-flash" || requestedModels[1] != "gemini-3.6-flash" {
+		t.Errorf("requestedModels = %v, want [gemini-3.7-flash, gemini-3.6-flash]", requestedModels)
+	}
+}

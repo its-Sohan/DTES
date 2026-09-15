@@ -8,6 +8,7 @@ package ocr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -112,38 +113,62 @@ func modeFor(mode string) Mode {
 	return modes[types.OutputModeDocument]
 }
 
-// highQualityUpgrades maps a configured Gemini model to its higher-accuracy
-// reasoning sibling for the "high" quality tier.
-var highQualityUpgrades = map[string]string{
-	"gemini-3.5-flash-lite": "gemini-3.7-flash",
-	"gemini-3.5-flash":      "gemini-3.7-flash",
-	"gemini-3.6-flash":      "gemini-3.7-flash",
+// geminiHighPrecisionOrder defines the cascading fallback preference sequence
+// for High Precision mode when using Gemini family models.
+var geminiHighPrecisionOrder = []string{
+	"gemini-3.7-flash",
+	"gemini-3.6-flash",
+	"gemini-3.5-flash",
+	"gemini-3.5-flash-lite",
 }
 
 // defaultDocumentOCRModel is the official Mistral OCR model identifier used
 // when Document mode is selected.
 const defaultDocumentOCRModel = "mistral-ocr-latest"
 
-// ResolveModel picks the model for a request.
+// isGeminiModel reports whether the model belongs to the Gemini family.
+func isGeminiModel(model string) bool {
+	lower := strings.ToLower(strings.TrimSpace(model))
+	return strings.HasPrefix(lower, "gemini-")
+}
+
+// ResolveModelChain returns an ordered slice of candidate models for a request.
+// For High Precision mode with Gemini models, it returns a cascading list
+// starting from the most capable model (3.7) down to reliable fallbacks (3.6, 3.5, lite).
+// For standard or custom models, it returns a single-item slice with the target model.
+func ResolveModelChain(configured, quality string) []string {
+	model := strings.TrimSpace(configured)
+	if model == "" {
+		model = "gemini-3.5-flash-lite"
+	}
+
+	switch types.Quality(quality) {
+	case types.QualityHigh:
+		if isGeminiModel(model) {
+			chain := make([]string, len(geminiHighPrecisionOrder))
+			copy(chain, geminiHighPrecisionOrder)
+			return chain
+		}
+		return []string{model}
+	case types.QualityDocument:
+		return []string{defaultDocumentOCRModel}
+	default:
+		return []string{model}
+	}
+}
+
+// ResolveModel picks the primary model for a request.
 //
 // The configured model is always the baseline. The "high" tier upgrades it only
 // when a known better sibling exists, so a custom or self-hosted model name is
 // never silently replaced with something the provider has never heard of.
 // The "document" tier routes the request directly to the dedicated OCR model.
 func ResolveModel(configured, quality string) string {
-	model := strings.TrimSpace(configured)
-	if model == "" {
-		model = "gemini-3.5-flash-lite"
+	chain := ResolveModelChain(configured, quality)
+	if len(chain) > 0 {
+		return chain[0]
 	}
-	switch types.Quality(quality) {
-	case types.QualityHigh:
-		if upgraded, ok := highQualityUpgrades[model]; ok {
-			return upgraded
-		}
-	case types.QualityDocument:
-		return defaultDocumentOCRModel
-	}
-	return model
+	return "gemini-3.5-flash-lite"
 }
 
 // ExtractText transcribes the document at filePath.
@@ -194,14 +219,40 @@ func extract(ctx context.Context, filePath, mode, quality string) (string, error
 	var raw string
 	if types.Quality(quality) == types.QualityDocument {
 		raw, err = completeOCR(ctx, ep, dataURL, MimeTypeFor(filePath))
+		if err != nil {
+			return "", err
+		}
 	} else {
 		m := modeFor(mode)
 		systemPrompt := fmt.Sprintf("%s\n\n[OUTPUT FORMAT DIRECTIVE: %s]\n%s",
 			basePrompt, strings.ToUpper(m.Label), m.SystemInstruction)
-		raw, err = complete(ctx, ep, systemPrompt, m.UserPrompt, dataURL)
-	}
-	if err != nil {
-		return "", err
+
+		candidates := ResolveModelChain(cfg.ModelName, quality)
+		var lastErr error
+		for i, candidateModel := range candidates {
+			candidateEP := ep
+			candidateEP.Model = candidateModel
+
+			raw, err = complete(ctx, candidateEP, systemPrompt, m.UserPrompt, dataURL)
+			if err == nil {
+				lastErr = nil
+				break
+			}
+			lastErr = err
+
+			// If the user cancelled, abort immediately without trying fallback models.
+			if errors.Is(err, context.Canceled) {
+				return "", err
+			}
+
+			// If the error is not eligible for fallback, or if we exhausted all candidates, stop.
+			if !isFallbackEligible(err) || i == len(candidates)-1 {
+				break
+			}
+		}
+		if lastErr != nil {
+			return "", lastErr
+		}
 	}
 
 	text := norm.NFC.String(strings.TrimSpace(raw))

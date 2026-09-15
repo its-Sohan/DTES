@@ -63,6 +63,51 @@ func (e *APIError) Retryable() bool {
 	return e.StatusCode == http.StatusTooManyRequests || e.StatusCode >= 500
 }
 
+// isFallbackEligible reports whether an error indicates that the current model
+// cannot fulfill the request due to quota, rate limits, capacity constraints,
+// or model unavailability, meaning trying a fallback model in the family is appropriate.
+func isFallbackEligible(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) {
+		return false
+	}
+
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.StatusCode {
+		case http.StatusTooManyRequests, // 429 quota or rate limit
+			http.StatusServiceUnavailable, // 503 capacity / overloaded
+			http.StatusBadGateway,         // 502
+			http.StatusGatewayTimeout,     // 504
+			http.StatusInternalServerError, // 500
+			http.StatusNotFound:           // 404 model not found
+			return true
+		case http.StatusBadRequest:
+			// Many proxies/providers return 400 when a model is not supported or quota is exceeded
+			lower := strings.ToLower(apiErr.Message)
+			if strings.Contains(lower, "model") ||
+				strings.Contains(lower, "quota") ||
+				strings.Contains(lower, "capacity") ||
+				strings.Contains(lower, "limit") {
+				return true
+			}
+		}
+	}
+
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "429") ||
+		strings.Contains(errStr, "quota") ||
+		strings.Contains(errStr, "rate limit") ||
+		strings.Contains(errStr, "rate_limit") ||
+		strings.Contains(errStr, "capacity") ||
+		strings.Contains(errStr, "503") ||
+		strings.Contains(errStr, "unavailable") ||
+		strings.Contains(errStr, "not found") ||
+		strings.Contains(errStr, "invalid model")
+}
+
 // --- Wire format (OpenAI-compatible chat completions) ---
 
 type messageContent struct {
