@@ -199,9 +199,7 @@ func ResolveOCREndpoint(baseURL string) string {
 		return clean
 	}
 
-	if strings.HasSuffix(clean, "/chat/completions") {
-		clean = strings.TrimSuffix(clean, "/chat/completions")
-	}
+	clean = strings.TrimSuffix(clean, "/chat/completions")
 
 	if !strings.HasSuffix(clean, "/v1") && !strings.Contains(clean, "/v1") {
 		clean += "/v1"
