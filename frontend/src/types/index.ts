@@ -41,9 +41,10 @@ export interface Config {
   api_key: string;
   base_url: string;
   model_name: string;
+  document_model_name?: string;
   auto_extract: boolean;
   default_output_mode: 'document' | 'spreadsheet' | 'key_value' | 'raw_text' | string;
-  quality: 'standard' | 'high' | string;
+  quality: 'standard' | 'high' | 'document' | string;
   releases_repo: string;
   check_updates_on_startup: boolean;
   usage_stats: UsageStats;

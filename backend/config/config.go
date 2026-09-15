@@ -68,6 +68,7 @@ func DefaultConfig() types.Config {
 		APIKey:              "",
 		BaseURL:             "https://ai.rupic.studio/v1",
 		ModelName:           "gemini-3.5-flash-lite",
+		DocumentModelName:   "mistral-ocr-latest",
 		AutoExtract:         true,
 		DefaultOutputMode:   string(types.OutputModeDocument),
 		Quality:             string(types.QualityStandard),
@@ -89,6 +90,9 @@ func withDefaults(cfg types.Config) types.Config {
 	}
 	if cfg.ModelName == "" {
 		cfg.ModelName = def.ModelName
+	}
+	if cfg.DocumentModelName == "" {
+		cfg.DocumentModelName = def.DocumentModelName
 	}
 	if !types.IsValidOutputMode(cfg.DefaultOutputMode) {
 		cfg.DefaultOutputMode = def.DefaultOutputMode

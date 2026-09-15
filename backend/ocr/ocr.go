@@ -130,20 +130,28 @@ var highQualityUpgrades = map[string]string{
 	"claude-3-haiku-20240307": "claude-3-5-sonnet-20241022",
 }
 
+// defaultDocumentOCRModel is the official Mistral OCR model identifier used
+// when Document mode is selected.
+const defaultDocumentOCRModel = "mistral-ocr-latest"
+
 // ResolveModel picks the model for a request.
 //
 // The configured model is always the baseline. The "high" tier upgrades it only
 // when a known better sibling exists, so a custom or self-hosted model name is
 // never silently replaced with something the provider has never heard of.
+// The "document" tier routes the request directly to the dedicated OCR model.
 func ResolveModel(configured, quality string) string {
 	model := strings.TrimSpace(configured)
 	if model == "" {
 		model = "gemini-3.5-flash-lite"
 	}
-	if types.Quality(quality) == types.QualityHigh {
+	switch types.Quality(quality) {
+	case types.QualityHigh:
 		if upgraded, ok := highQualityUpgrades[model]; ok {
 			return upgraded
 		}
+	case types.QualityDocument:
+		return defaultDocumentOCRModel
 	}
 	return model
 }

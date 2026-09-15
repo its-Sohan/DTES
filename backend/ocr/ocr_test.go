@@ -132,6 +132,8 @@ func TestResolveModel(t *testing.T) {
 		{"unknown vendor model kept on high", "qwen2.5-vl-72b", "high", "qwen2.5-vl-72b"},
 		{"unrecognised quality is treated as standard", "gpt-4o-mini", "ludicrous", "gpt-4o-mini"},
 		{"empty quality is treated as standard", "gpt-4o-mini", "", "gpt-4o-mini"},
+		{"document routes to mistral-ocr-latest", "gpt-4o-mini", "document", "mistral-ocr-latest"},
+		{"document routes gemini to mistral-ocr-latest", "gemini-3.5-flash-lite", "document", "mistral-ocr-latest"},
 	}
 
 	for _, tc := range tests {

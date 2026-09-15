@@ -61,6 +61,18 @@ export const HelpModal: React.FC = () => {
             </div>
           </div>
 
+          {/* Extraction Modes */}
+          <div>
+            <h3 className="font-semibold text-ink-primaryLight dark:text-ink-primaryDark mb-1">
+              Extraction Modes
+            </h3>
+            <ul className="list-disc pl-4 space-y-1 text-ink-secondaryLight dark:text-ink-secondaryDark">
+              <li><strong>Standard</strong>: Fast vision LLM extraction using the configured base vision model.</li>
+              <li><strong>High Precision</strong>: Upgrades the model to its higher-accuracy reasoning tier for complex or degraded pages.</li>
+              <li><strong>Document</strong>: Routes requests directly to a dedicated OCR model (<code className="font-mono text-[10px]">mistral-ocr-latest</code> or custom configured model) rather than a general vision LLM.</li>
+            </ul>
+          </div>
+
           {/* Bengali Typography & OCR */}
           <div>
             <h3 className="font-semibold text-ink-primaryLight dark:text-ink-primaryDark mb-1">

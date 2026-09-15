@@ -245,12 +245,13 @@ export const TextPanel: React.FC = () => {
           {/* Quality Pure Typography & Color Switch */}
           <div className="flex items-center space-x-3 text-xs">
             <span className="font-mono text-[10px] text-ink-secondaryLight/50 dark:text-ink-secondaryDark/50 uppercase">
-              Quality
+              Mode
             </span>
             <div className="flex items-center space-x-2.5">
               <button
                 type="button"
                 onClick={() => setQuality('standard')}
+                title="Standard: fast extraction with vision LLM"
                 className={`flex items-center space-x-1.5 transition-all ${
                   activeQuality === 'standard'
                     ? 'text-ink-primaryLight dark:text-ink-primaryDark font-semibold'
@@ -270,6 +271,7 @@ export const TextPanel: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setQuality('high')}
+                title="High Precision: upgraded vision model for difficult scripts"
                 className={`flex items-center space-x-1.5 transition-all ${
                   activeQuality === 'high'
                     ? 'text-brand-light dark:text-brand-dark font-semibold'
@@ -282,6 +284,26 @@ export const TextPanel: React.FC = () => {
                   }`}
                 />
                 <span>High Precision</span>
+              </button>
+
+              <span className="text-ink-secondaryLight/20 dark:text-ink-secondaryDark/20 font-mono text-[10px]">/</span>
+
+              <button
+                type="button"
+                onClick={() => setQuality('document')}
+                title="Document Mode: routes directly to dedicated OCR model"
+                className={`flex items-center space-x-1.5 transition-all ${
+                  activeQuality === 'document'
+                    ? 'text-brand-light dark:text-brand-dark font-semibold'
+                    : 'text-ink-secondaryLight/50 dark:text-ink-secondaryDark/50 hover:text-ink-secondaryLight dark:hover:text-ink-secondaryDark'
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full transition-all ${
+                    activeQuality === 'document' ? 'bg-brand-light dark:bg-brand-dark scale-100' : 'bg-transparent scale-0'
+                  }`}
+                />
+                <span>Document</span>
               </button>
             </div>
           </div>

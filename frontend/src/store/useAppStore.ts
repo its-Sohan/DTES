@@ -6,7 +6,7 @@ export interface AppState {
   queue: QueueItem[];
   selectedItemId: string | null;
   activeOutputMode: 'document' | 'spreadsheet' | 'key_value' | 'raw_text';
-  activeQuality: 'standard' | 'high';
+  activeQuality: 'standard' | 'high' | 'document';
   themeMode: 'dark' | 'light';
   auditMode: boolean;
   activeBlockIndex: number;
@@ -24,6 +24,7 @@ const initialConfig: Config = {
   api_key: '',
   base_url: 'https://ai.rupic.studio/v1',
   model_name: 'gemini-3.5-flash-lite',
+  document_model_name: 'mistral-ocr-latest',
   auto_extract: true,
   default_output_mode: 'document',
   quality: 'standard',

@@ -41,6 +41,7 @@ type Quality string
 const (
 	QualityStandard Quality = "standard"
 	QualityHigh     Quality = "high"
+	QualityDocument Quality = "document"
 )
 
 // IsValidOutputMode reports whether s names a supported output mode.
@@ -56,7 +57,7 @@ func IsValidOutputMode(s string) bool {
 // IsValidQuality reports whether s names a supported quality tier.
 func IsValidQuality(s string) bool {
 	switch Quality(s) {
-	case QualityStandard, QualityHigh:
+	case QualityStandard, QualityHigh, QualityDocument:
 		return true
 	default:
 		return false
@@ -112,6 +113,7 @@ type Config struct {
 	APIKey              string     `json:"api_key"`
 	BaseURL             string     `json:"base_url"`
 	ModelName           string     `json:"model_name"`
+	DocumentModelName   string     `json:"document_model_name,omitempty"`
 	AutoExtract         bool       `json:"auto_extract"`
 	DefaultOutputMode   string     `json:"default_output_mode"`
 	Quality             string     `json:"quality"`

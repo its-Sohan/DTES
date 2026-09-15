@@ -90,7 +90,7 @@ export const SettingsModal: React.FC = () => {
 
             <div>
               <label className="block font-medium text-ink-primaryLight dark:text-ink-primaryDark mb-1">
-                Extraction Quality
+                Default Extraction Mode
               </label>
               <select
                 value={formData.quality}
@@ -99,8 +99,26 @@ export const SettingsModal: React.FC = () => {
               >
                 <option value="standard">Standard</option>
                 <option value="high">High Precision</option>
+                <option value="document">Document Mode</option>
               </select>
             </div>
+          </div>
+
+          {/* Document OCR Model Identifier */}
+          <div className="pt-2 border-t border-hairline-light dark:border-hairline-dark">
+            <label className="block font-medium text-ink-primaryLight dark:text-ink-primaryDark mb-1">
+              Document OCR Model Identifier
+            </label>
+            <input
+              type="text"
+              value={formData.document_model_name || ''}
+              onChange={(e) => setFormData({ ...formData, document_model_name: e.target.value })}
+              placeholder="mistral-ocr-latest"
+              className="w-full font-mono text-xs px-3 py-1.5 rounded bg-inset-light dark:bg-inset-dark border border-hairline-light dark:border-hairline-dark text-ink-primaryLight dark:text-ink-primaryDark outline-none"
+            />
+            <p className="text-[11px] text-ink-secondaryLight/60 dark:text-ink-secondaryDark/60 mt-1">
+              Model name sent when Document mode is selected. Defaults to <span className="font-mono text-ink-primaryLight dark:text-ink-primaryDark">mistral-ocr-latest</span>.
+            </p>
           </div>
 
           {/* Toggles */}

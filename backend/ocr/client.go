@@ -168,10 +168,15 @@ func resolveEndpoint(cfg types.Config, quality string) (Endpoint, error) {
 		base = defaultBaseURL
 	}
 
+	model := ResolveModel(cfg.ModelName, quality)
+	if types.Quality(quality) == types.QualityDocument && strings.TrimSpace(cfg.DocumentModelName) != "" {
+		model = strings.TrimSpace(cfg.DocumentModelName)
+	}
+
 	ep := Endpoint{
 		URL:    ResolveChatEndpoint(base),
 		APIKey: strings.TrimSpace(cfg.APIKey),
-		Model:  ResolveModel(cfg.ModelName, quality),
+		Model:  model,
 		base:   strings.TrimRight(base, "/"),
 	}
 

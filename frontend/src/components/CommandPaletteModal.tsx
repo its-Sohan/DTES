@@ -6,6 +6,7 @@ import {
   runAllPending,
   extractItem,
   toggleTheme,
+  setQuality,
 } from '../store/useAppStore';
 import * as api from '../../wailsjs/go/main/App';
 
@@ -95,6 +96,33 @@ export const CommandPaletteModal: React.FC = () => {
       shortcut: 'Ctrl+T',
       perform: () => {
         toggleTheme();
+        setModal('none');
+      },
+    },
+    {
+      id: 'mode_standard',
+      title: 'Mode: Standard (Vision LLM)',
+      category: 'Mode',
+      perform: () => {
+        setQuality('standard');
+        setModal('none');
+      },
+    },
+    {
+      id: 'mode_high',
+      title: 'Mode: High Precision (Advanced Vision LLM)',
+      category: 'Mode',
+      perform: () => {
+        setQuality('high');
+        setModal('none');
+      },
+    },
+    {
+      id: 'mode_document',
+      title: 'Mode: Document (Dedicated OCR Model)',
+      category: 'Mode',
+      perform: () => {
+        setQuality('document');
         setModal('none');
       },
     },
